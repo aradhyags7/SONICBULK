@@ -59,6 +59,7 @@ class MainWindow(QMainWindow):
         # Settings
         self.settings_path = settings_path or get_default_config_path()
         self.settings = AppSettings.load_from_file(self.settings_path)
+        self.settings.validate()
 
         # Database
         db_path = self.settings_path.parent / "jobs.db"

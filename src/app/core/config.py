@@ -8,10 +8,34 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 
+def get_default_output_dir() -> str:
+    """Find a verified writable default output directory.
+
+    Tests writability to avoid Windows Controlled Folder Access or ReadOnly errors
+    on protected user directories like C:\\Users\\...\\Music.
+    """
+    candidates = [
+        Path.home() / "Downloads" / "MusicDownloader",
+        Path.home() / "Music" / "MusicDownloader",
+        Path.cwd() / "music",
+    ]
+    for candidate in candidates:
+        try:
+            candidate.mkdir(parents=True, exist_ok=True)
+            test_file = candidate / ".perm_check.tmp"
+            test_file.write_text("ok")
+            test_file.unlink(missing_ok=True)
+            return str(candidate.resolve())
+        except Exception:
+            continue
+
+    return str((Path.cwd() / "music").resolve())
+
+
 @dataclass
 class AppSettings:
     """Configurable application settings."""
-    output_dir: str = field(default_factory=lambda: str(Path.home() / "Music" / "MusicDownloader"))
+    output_dir: str = field(default_factory=get_default_output_dir)
     folder_layout: str = "flat"  # "flat" | "artist_album"
     filename_template: str = "{artist} - {title}"
     output_format: str = "native"  # "native" | "mp3" | "m4a" | "flac"
@@ -36,7 +60,7 @@ class AppSettings:
     min_disk_free_mb: int = 500
 
     def validate(self) -> None:
-        """Validate configuration bounds."""
+        """Validate configuration bounds and verify output directory writability."""
         self.download_concurrency = max(1, min(16, self.download_concurrency))
         self.search_concurrency = max(1, min(32, self.search_concurrency))
         self.resolve_concurrency = max(1, min(32, self.resolve_concurrency))
@@ -44,6 +68,16 @@ class AppSettings:
         self.per_host_limit = max(1, min(32, self.per_host_limit))
         self.threshold_high = max(0.0, min(1.0, self.threshold_high))
         self.threshold_low = max(0.0, min(self.threshold_high, self.threshold_low))
+
+        # Verify directory writability, fallback if permission denied
+        try:
+            p = Path(self.output_dir).resolve()
+            p.mkdir(parents=True, exist_ok=True)
+            test_f = p / ".perm_check.tmp"
+            test_f.write_text("ok")
+            test_f.unlink(missing_ok=True)
+        except Exception:
+            self.output_dir = get_default_output_dir()
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)

@@ -199,8 +199,15 @@ class ResultsView(QWidget):
             if is_low_conf:
                 item_conf.setForeground(Qt.GlobalColor.yellow)
 
-            match_text = job.output_path or job.error_message or ""
+            if job.status.value == "failed":
+                match_text = f"Failed: {job.error_message}" if job.error_message else "Download failed"
+            elif job.status.value == "not_found":
+                match_text = job.error_message or "No matching audio stream found"
+            else:
+                match_text = job.output_path or ""
+
             item_match = QTableWidgetItem(match_text)
+            item_match.setToolTip(job.error_message if job.status.value == "failed" else match_text)
 
             self.table.setItem(row, 0, item_art)
             self.table.setItem(row, 1, item_tit)

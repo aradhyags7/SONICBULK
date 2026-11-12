@@ -94,7 +94,15 @@ class DownloadEngine:
         - Cancel without file corruption
         """
         dest = Path(destination_path).resolve()
-        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.warning("Target folder %s is not writable (%s); redirecting to safe fallback", dest.parent, e)
+            from app.core.config import get_default_output_dir
+            fallback_dir = Path(get_default_output_dir()).resolve()
+            fallback_dir.mkdir(parents=True, exist_ok=True)
+            dest = fallback_dir / dest.name
+
         part_path = dest.with_name(f"{dest.name}.part")
 
         # Pre-flight disk space check
