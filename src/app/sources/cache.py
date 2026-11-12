@@ -32,23 +32,28 @@ class CachedSourceProvider(SourceProvider):
         cache_key = f"search:{self.provider.name}:{clean_q}:{limit}"
         cached_data = await self.repository.get_cache(cache_key)
 
-        if cached_data is not None and isinstance(cached_data, list):
-            logger.debug("Cache hit for search '%s'", query)
+        # Only treat as a cache hit if it contains valid non-empty candidates
+        if cached_data is not None and isinstance(cached_data, list) and len(cached_data) > 0:
+            logger.debug("Cache hit for search '%s' (%d candidates)", query, len(cached_data))
             return [Candidate.from_dict(item) for item in cached_data]
 
         candidates = await self.provider.search(query, limit=limit)
-        serialized = [c.to_dict() for c in candidates]
-        await self.repository.set_cache(cache_key, "search", serialized, self.ttl_seconds)
+        # CRITICAL: Never cache empty search results [] so temporary provider/network glitches
+        # do not permanently blacklist songs from future searches.
+        if candidates:
+            serialized = [c.to_dict() for c in candidates]
+            await self.repository.set_cache(cache_key, "search", serialized, self.ttl_seconds)
         return candidates
 
     async def resolve(self, candidate: Candidate) -> StreamInfo:
         cache_key = f"resolve:{candidate.provider}:{candidate.source_id}"
         cached_data = await self.repository.get_cache(cache_key)
 
-        if cached_data is not None and isinstance(cached_data, dict):
+        if cached_data is not None and isinstance(cached_data, dict) and cached_data.get("url"):
             logger.debug("Cache hit for stream resolve '%s'", candidate.title)
             return StreamInfo.from_dict(cached_data)
 
         stream_info = await self.provider.resolve(candidate)
-        await self.repository.set_cache(cache_key, "resolve", stream_info.to_dict(), self.ttl_seconds)
+        if stream_info and stream_info.url:
+            await self.repository.set_cache(cache_key, "resolve", stream_info.to_dict(), self.ttl_seconds)
         return stream_info

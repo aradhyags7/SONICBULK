@@ -39,6 +39,8 @@ class DatabaseRepository:
         self._conn = await aiosqlite.connect(self.db_path)
         self._conn.row_factory = aiosqlite.Row
         await self._conn.executescript(SCHEMA_SQL)
+        # Clean any legacy empty cache records so they never block future searches
+        await self._conn.execute("DELETE FROM cache WHERE payload_json = '[]' OR payload_json = '' OR payload_json IS NULL")
         await self._conn.commit()
         logger.info("Database initialized at %s with WAL mode", self.db_path)
 
