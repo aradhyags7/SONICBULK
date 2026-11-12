@@ -1,5 +1,6 @@
 """Unit tests for SQLite WAL database repository."""
 
+from collections.abc import AsyncGenerator
 from pathlib import Path
 
 import pytest
@@ -9,7 +10,7 @@ from app.db.repository import DatabaseRepository
 
 
 @pytest.fixture
-async def repo(tmp_path: Path) -> DatabaseRepository:
+async def repo(tmp_path: Path) -> AsyncGenerator[DatabaseRepository, None]:
     db_file = tmp_path / "test_jobs.db"
     repository = DatabaseRepository(db_file)
     await repository.initialize()
