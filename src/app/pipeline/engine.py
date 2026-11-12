@@ -22,7 +22,9 @@ from app.core.models import (
 from app.db.repository import DatabaseRepository
 from app.match.matcher import MatchEngine
 from app.pipeline.adaptive import AdaptiveConcurrencyController
+from app.pipeline.convert import convert_audio_file
 from app.pipeline.download_stage import DownloadEngine
+from app.pipeline.tag_stage import tag_audio_file
 from app.sources.base import SourceProvider
 from app.utils.paths import generate_output_path
 from app.utils.rate_limiter import TokenBucketRateLimiter
@@ -414,8 +416,25 @@ class PipelineEngine:
                 self._publish_job_status(job)
 
                 if self.tag_worker:
-                    # Execute tagging in thread pool to avoid blocking asyncio loop
                     await asyncio.to_thread(self.tag_worker, job)
+                elif job.output_path and Path(job.output_path).is_file():
+                    out_p = Path(job.output_path)
+                    cand = job.match_decision.candidate if job.match_decision else None
+                    album = cand.album if cand else None
+                    await asyncio.to_thread(
+                        tag_audio_file,
+                        out_p,
+                        title=job.song.title,
+                        artist=job.song.artist,
+                        album=album,
+                    )
+                    if self.settings.output_format != "native":
+                        conv_p = await asyncio.to_thread(
+                            convert_audio_file,
+                            out_p,
+                            target_format=self.settings.output_format,
+                        )
+                        job.output_path = str(conv_p)
 
                 job.status = JobStatus.DONE
                 self.count_downloaded += 1
