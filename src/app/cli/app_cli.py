@@ -36,7 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser("run", help="Parse and download songs from a file")
     run_parser.add_argument("input", type=str, help="Path to input playlist (PDF, DOCX, CSV, TXT)")
     run_parser.add_argument("--out", "-o", type=str, default="./music", help="Output directory")
-    run_parser.add_argument("--workers", "-w", type=int, default=5, help="Concurrent downloads (1-16)")
+    run_parser.add_argument("--workers", "-w", type=int, default=1, help="Concurrent downloads (default: 1 for sequential)")
     run_parser.add_argument("--format", "-f", type=str, default="native", choices=["native", "mp3", "m4a", "flac"], help="Output format")
     run_parser.add_argument("--layout", "-l", type=str, default="flat", choices=["flat", "artist_album"], help="Folder layout")
     run_parser.add_argument("--provider", type=str, default="archive,jamendo", help="Comma-separated provider order")

@@ -18,6 +18,7 @@ from app.core.models import (
     Confidence,
     DownloadJob,
     JobStatus,
+    MatchDecision,
 )
 from app.db.repository import DatabaseRepository
 from app.match.matcher import MatchEngine
@@ -169,12 +170,20 @@ class PipelineEngine:
         self._active_workers = workers
 
         try:
-            # Wait until all items have flowed through all queues
-            await feeder
-            await self.search_queue.join()
-            await self.resolve_queue.join()
-            await self.download_queue.join()
-            await self.tag_queue.join()
+            # Wait until all items have flowed through all queues or cancellation triggered
+            async def _wait_completion() -> None:
+                await feeder
+                await self.search_queue.join()
+                await self.resolve_queue.join()
+                await self.download_queue.join()
+                await self.tag_queue.join()
+
+            wait_task = asyncio.create_task(_wait_completion())
+            cancel_task = asyncio.create_task(self.cancel_event.wait())
+
+            _, pending = await asyncio.wait([wait_task, cancel_task], return_when=asyncio.FIRST_COMPLETED)
+            for t in pending:
+                t.cancel()
         finally:
             # Send stop sentinels to terminate worker loops
             for _ in range(self.settings.search_concurrency):
@@ -185,6 +194,11 @@ class PipelineEngine:
                 await self.download_queue.put(None)
             for _ in range(self.settings.tag_concurrency):
                 await self.tag_queue.put(None)
+
+            if self.cancel_event.is_set():
+                for w in workers:
+                    if not w.done():
+                        w.cancel()
 
             await asyncio.gather(*workers, return_exceptions=True)
 

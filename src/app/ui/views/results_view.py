@@ -207,7 +207,7 @@ class ResultsView(QWidget):
                 match_text = job.output_path or ""
 
             item_match = QTableWidgetItem(match_text)
-            item_match.setToolTip(job.error_message if job.status.value == "failed" else match_text)
+            item_match.setToolTip((job.error_message or "") if job.status.value == "failed" else match_text)
 
             self.table.setItem(row, 0, item_art)
             self.table.setItem(row, 1, item_tit)

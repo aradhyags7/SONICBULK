@@ -41,7 +41,7 @@ class AppSettings:
     output_format: str = "native"  # "native" | "mp3" | "m4a" | "flac"
     search_concurrency: int = 8
     resolve_concurrency: int = 6
-    download_concurrency: int = 5  # Range: 1-16
+    download_concurrency: int = 1  # 1-by-1 sequential download
     tag_concurrency: int = 4
     per_host_limit: int = 4
     threshold_high: float = 0.85
