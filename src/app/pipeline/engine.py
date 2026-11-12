@@ -111,7 +111,17 @@ class PipelineEngine:
             ttl_dns_cache=300,
             enable_cleanup_closed=True,
         )
-        self.session = aiohttp.ClientSession(connector=connector)
+        default_headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            )
+        }
+        self.session = aiohttp.ClientSession(
+            connector=connector,
+            headers=default_headers,
+            read_bufsize=256 * 1024,
+        )
         self.download_engine = DownloadEngine(
             session=self.session,
             rate_limiter=self.rate_limiter,
@@ -414,6 +424,7 @@ class PipelineEngine:
                             total_bytes=total,
                             speed_bps=speed,
                         ))
+                        self._publish_batch_progress()
 
                     # Stream download
                     out_path = await self.download_engine.download_file(
@@ -423,18 +434,21 @@ class PipelineEngine:
                         on_progress=on_progress,
                         cancel_event=self.cancel_event,
                     )
+                    job.speed_bps = 0.0
                     job.output_path = str(out_path)
 
                     # Hand off immediately to Tag stage
                     await self.tag_queue.put(job)
 
                 except asyncio.CancelledError:
+                    job.speed_bps = 0.0
                     job.status = JobStatus.FAILED
                     job.error_message = "Cancelled"
                     await self.repository.update_job_status(job.id, JobStatus.FAILED, error_message="Cancelled")
                     self._publish_job_status(job)
                 except Exception as e:
                     logger.error("Download failed for '%s': %s", job.song.title, e)
+                    job.speed_bps = 0.0
                     job.status = JobStatus.FAILED
                     job.error_message = str(e)
                     self.count_failed += 1

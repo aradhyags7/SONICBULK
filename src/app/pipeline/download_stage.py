@@ -18,7 +18,8 @@ from app.utils.rate_limiter import TokenBucketRateLimiter
 
 logger = logging.getLogger(__name__)
 
-CHUNK_SIZE = 64 * 1024  # 64 KiB chunks
+CHUNK_SIZE = 64 * 1024  # 64 KiB chunks for disk streaming
+HTTP_CHUNK_SIZE = 10 * 1024 * 1024  # 10 MiB bounded HTTP Range chunks (bypasses YouTube/CDN bitrate throttling)
 
 
 class DownloadError(Exception):
@@ -168,128 +169,173 @@ class DownloadEngine:
         on_progress: Callable[[int, int | None, float], None] | None,
         cancel_event: asyncio.Event | None,
     ) -> Path:
-        headers = dict(stream_info.headers)
-        resume_offset = 0
+        base_headers = dict(stream_info.headers)
+        if "User-Agent" not in base_headers:
+            base_headers["User-Agent"] = (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            )
 
-        # Check existing .part file for resume
+        resume_offset = 0
         if part_path.is_file():
             resume_offset = part_path.stat().st_size
-            if resume_offset > 0:
-                headers["Range"] = f"bytes={resume_offset}-"
-                if stream_info.etag:
-                    headers["If-Range"] = stream_info.etag
-                elif stream_info.last_modified:
-                    headers["If-Range"] = stream_info.last_modified
 
-        timeout = aiohttp.ClientTimeout(total=300, sock_read=30, sock_connect=15)
+        bytes_downloaded = resume_offset
+        total_bytes = stream_info.size_bytes
+        speed_bps = 0.0
+        start_time = asyncio.get_event_loop().time()
+        last_progress_time = start_time
+        chunk_bytes_since_last = 0
+
+        timeout = aiohttp.ClientTimeout(total=600, sock_read=45, sock_connect=15)
+
         try:
-            async with self.session.get(stream_info.url, headers=headers, timeout=timeout) as response:
-                status = response.status
+            # Download in bounded HTTP Range chunks to bypass YouTube/GoogleVideo playback rate throttling
+            while True:
+                if cancel_event and cancel_event.is_set():
+                    raise asyncio.CancelledError("Download cancelled by user")
 
-                # Handle 429 Too Many Requests
-                if status == 429:
-                    retry_after = parse_retry_after(response.headers.get("Retry-After"))
-                    raise RateLimitError("HTTP 429 Too Many Requests", retry_after=retry_after)
+                if total_bytes is not None and bytes_downloaded >= total_bytes:
+                    break
 
-                # Handle 503 Service Unavailable
-                if status == 503:
-                    retry_after = parse_retry_after(response.headers.get("Retry-After"))
-                    raise RetryableDownloadError(f"HTTP 503 Service Unavailable (Retry-After: {retry_after})")
+                headers = dict(base_headers)
+                chunk_start = bytes_downloaded
 
-                # Handle permanent HTTP errors
-                if status in (400, 401, 403, 404, 410):
-                    raise PermanentDownloadError(f"Permanent HTTP error {status}: {response.reason}")
+                # Compute bounded chunk range:
+                # Unbounded requests (e.g. bytes=0-) cause GoogleVideo CDN to throttle stream to audio bitrate (~24-60 KB/s).
+                # Bounded ranges (e.g. 10 MiB bursts) bypass this throttling and stream at full line speed (5-50 MB/s).
+                if total_bytes is not None:
+                    chunk_end = min(total_bytes - 1, chunk_start + HTTP_CHUNK_SIZE - 1)
+                else:
+                    chunk_end = chunk_start + HTTP_CHUNK_SIZE - 1
 
-                # Handle 416 Range Not Satisfiable
-                if status == 416:
-                    cr = response.headers.get("Content-Range", "")
-                    # Content-Range format: bytes */total
-                    if "/" in cr:
-                        total_str = cr.split("/")[-1].strip()
-                        if total_str.isdigit() and int(total_str) == resume_offset and resume_offset > 0:
-                            # Already fully downloaded!
-                            part_path.replace(dest)
-                            await self.adaptive_controller.report_success()
-                            return dest
-                    # Invalid range: wipe .part and restart
-                    if part_path.is_file():
-                        part_path.unlink(missing_ok=True)
-                    raise RetryableDownloadError("HTTP 416 Range Not Satisfiable: restarting from zero")
+                headers["Range"] = f"bytes={chunk_start}-{chunk_end}"
+                if chunk_start > 0:
+                    if stream_info.etag:
+                        headers["If-Range"] = stream_info.etag
+                    elif stream_info.last_modified:
+                        headers["If-Range"] = stream_info.last_modified
 
-                # Handle other 5xx server errors
-                if status >= 500:
-                    raise RetryableDownloadError(f"Server error HTTP {status}: {response.reason}")
+                async with self.session.get(stream_info.url, headers=headers, timeout=timeout) as response:
+                    status = response.status
 
-                if status not in (200, 206):
-                    raise PermanentDownloadError(f"Unexpected HTTP status {status}: {response.reason}")
+                    # Handle 429 Too Many Requests
+                    if status == 429:
+                        retry_after = parse_retry_after(response.headers.get("Retry-After"))
+                        raise RateLimitError("HTTP 429 Too Many Requests", retry_after=retry_after)
 
-                # If server sent 200 instead of 206, Range was not honored or If-Range failed -> start from 0
-                mode = "ab"
-                bytes_downloaded = resume_offset
-                if status == 200:
-                    mode = "wb"
-                    bytes_downloaded = 0
+                    # Handle 503 Service Unavailable
+                    if status == 503:
+                        retry_after = parse_retry_after(response.headers.get("Retry-After"))
+                        raise RetryableDownloadError(f"HTTP 503 Service Unavailable (Retry-After: {retry_after})")
 
-                # Determine total size
-                content_len = response.headers.get("Content-Length")
-                total_bytes = stream_info.size_bytes
-                if content_len and content_len.isdigit():
-                    if status == 206:
-                        total_bytes = bytes_downloaded + int(content_len)
+                    # Handle permanent HTTP errors
+                    if status in (400, 401, 403, 404, 410):
+                        raise PermanentDownloadError(f"Permanent HTTP error {status}: {response.reason}")
+
+                    # Handle 416 Range Not Satisfiable
+                    if status == 416:
+                        cr = response.headers.get("Content-Range", "")
+                        if "/" in cr:
+                            total_str = cr.split("/")[-1].strip()
+                            if total_str.isdigit() and int(total_str) == bytes_downloaded and bytes_downloaded > 0:
+                                # Already fully downloaded!
+                                part_path.replace(dest)
+                                await self.adaptive_controller.report_success()
+                                return dest
+                        # Invalid range: wipe .part and restart
+                        if part_path.is_file():
+                            part_path.unlink(missing_ok=True)
+                        raise RetryableDownloadError("HTTP 416 Range Not Satisfiable: restarting from zero")
+
+                    # Handle other 5xx server errors
+                    if status >= 500:
+                        raise RetryableDownloadError(f"Server error HTTP {status}: {response.reason}")
+
+                    if status not in (200, 206):
+                        raise PermanentDownloadError(f"Unexpected HTTP status {status}: {response.reason}")
+
+                    # Determine write mode and extract total size
+                    if status == 200:
+                        # Server sent entire file or rejected Range / If-Range mismatch -> restart from 0
+                        mode = "wb"
+                        bytes_downloaded = 0
+                        cl = response.headers.get("Content-Length")
+                        if cl and cl.isdigit():
+                            total_bytes = int(cl)
                     else:
-                        total_bytes = int(content_len)
+                        # 206 Partial Content
+                        mode = "ab" if bytes_downloaded > 0 else "wb"
+                        cr = response.headers.get("Content-Range", "")
+                        if "/" in cr:
+                            tot = cr.split("/")[-1].strip()
+                            if tot.isdigit():
+                                total_bytes = int(tot)
 
-                # Open .part file for writing/appending
-                with open(part_path, mode) as f:
-                    start_time = asyncio.get_event_loop().time()
-                    last_progress_time = start_time
-                    chunk_bytes_since_last = 0
-                    speed_bps = 0.0
+                    # Open .part file for writing/appending this chunk
+                    with open(part_path, mode) as f:
+                        chunk_received = 0
+                        async for chunk in response.content.iter_chunked(CHUNK_SIZE):
+                            if cancel_event and cancel_event.is_set():
+                                # Flush file descriptor, do NOT delete .part so resume is retained
+                                f.flush()
+                                os.fsync(f.fileno())
+                                raise asyncio.CancelledError("Download cancelled by user")
 
-                    async for chunk in response.content.iter_chunked(CHUNK_SIZE):
-                        if cancel_event and cancel_event.is_set():
-                            # Flush file descriptor, do NOT delete .part so resume is retained
-                            f.flush()
-                            os.fsync(f.fileno())
-                            raise asyncio.CancelledError("Download cancelled by user")
+                            # Bandwidth throttling
+                            await self.rate_limiter.acquire(len(chunk))
 
-                        # Bandwidth throttling
-                        await self.rate_limiter.acquire(len(chunk))
+                            f.write(chunk)
+                            bytes_downloaded += len(chunk)
+                            chunk_received += len(chunk)
+                            chunk_bytes_since_last += len(chunk)
 
-                        f.write(chunk)
-                        bytes_downloaded += len(chunk)
-                        chunk_bytes_since_last += len(chunk)
+                            now = asyncio.get_event_loop().time()
+                            dt = now - last_progress_time
+                            # Notify on first chunk or every 0.2s (5 Hz throttling)
+                            if dt >= 0.2 or bytes_downloaded == len(chunk):
+                                speed_bps = chunk_bytes_since_last / max(0.001, dt)
+                                chunk_bytes_since_last = 0
+                                last_progress_time = now
+                                if on_progress:
+                                    on_progress(bytes_downloaded, total_bytes, speed_bps)
 
-                        now = asyncio.get_event_loop().time()
-                        dt = now - last_progress_time
-                        # Notify on first chunk or every 0.2s (5 Hz throttling)
-                        if dt >= 0.2 or bytes_downloaded == len(chunk):
-                            speed_bps = chunk_bytes_since_last / max(0.001, dt)
-                            chunk_bytes_since_last = 0
-                            last_progress_time = now
-                            if on_progress:
-                                on_progress(bytes_downloaded, total_bytes, speed_bps)
+                        # Flush and physical fsync to ensure data integrity
+                        f.flush()
+                        os.fsync(f.fileno())
 
-                    # Flush and physical fsync to ensure data integrity
-                    f.flush()
-                    os.fsync(f.fileno())
+                    # If server sent full content via 200 OK, single stream finished
+                    if status == 200:
+                        break
 
-                # Validate downloaded size if total_bytes was known
-                final_size = part_path.stat().st_size
-                if total_bytes and total_bytes > 0 and final_size < total_bytes:
-                    raise RetryableDownloadError(
-                        f"Premature stream end: downloaded {final_size} of {total_bytes} bytes"
-                    )
+                    # If 206 but no bytes were received, break to prevent infinite loop
+                    if chunk_received == 0:
+                        break
 
-                # Atomic rename from .part to destination
-                part_path.replace(dest)
+                    # If total_bytes reached or exceeded, complete
+                    if total_bytes is not None and bytes_downloaded >= total_bytes:
+                        break
 
-                # Final 100% progress notification
-                if on_progress:
-                    on_progress(final_size, total_bytes or final_size, speed_bps)
+                    # If server sent fewer bytes than requested without total_bytes header, we've hit EOF
+                    if total_bytes is None and chunk_received < (chunk_end - chunk_start + 1):
+                        break
 
-                await self.adaptive_controller.report_success()
-                return dest
+            # Validate downloaded size if total_bytes was known
+            final_size = part_path.stat().st_size
+            if total_bytes and total_bytes > 0 and final_size < total_bytes:
+                raise RetryableDownloadError(
+                    f"Premature stream end: downloaded {final_size} of {total_bytes} bytes"
+                )
+
+            # Atomic rename from .part to destination
+            part_path.replace(dest)
+
+            # Final 100% progress notification
+            if on_progress:
+                on_progress(final_size, total_bytes or final_size, speed_bps)
+
+            await self.adaptive_controller.report_success()
+            return dest
 
         except (aiohttp.ClientError, asyncio.TimeoutError) as net_err:
             raise RetryableDownloadError(f"Network error: {net_err}") from net_err
