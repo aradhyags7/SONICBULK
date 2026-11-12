@@ -9,10 +9,9 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QDragEnterEvent, QDropEvent
 from PySide6.QtWidgets import (
     QFileDialog,
-    QGroupBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
-    QLineEdit,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
@@ -23,27 +22,55 @@ from PySide6.QtWidgets import (
 class DropZoneWidget(QWidget):
     """Visual drag-and-drop zone accepting PDF, DOCX, CSV, and TXT files."""
 
-    def __init__(self, on_file_dropped: Callable[[Path], None]) -> None:
+    def __init__(self, on_file_dropped: Callable[[Path], None], on_browse_clicked: Callable[[], None]) -> None:
         super().__init__()
         self.on_file_dropped = on_file_dropped
+        self.on_browse_clicked = on_browse_clicked
         self.setAcceptDrops(True)
+        self.setMinimumHeight(240)
         self.setStyleSheet(
-            "border: 2px dashed #3b82f6; border-radius: 10px; background-color: #1a1e27; padding: 24px;"
+            """
+            QWidget {
+                border: 2px dashed #475a4d;
+                border-radius: 16px;
+                background-color: #dde1d6;
+            }
+            """
         )
 
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(14)
 
-        icon_lbl = QLabel("📂", self)
-        icon_lbl.setStyleSheet("font-size: 32px; border: none; background: transparent;")
-        icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_text = QLabel("Drag a playlist file here", self)
+        self.lbl_text.setStyleSheet("color: #111813; font-size: 22px; font-weight: 800; border: none; background: transparent;")
+        self.lbl_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        text_lbl = QLabel("Drag & Drop your PDF, DOCX, CSV, or TXT playlist here\nor click Browse File below", self)
-        text_lbl.setStyleSheet("color: #cbd5e1; font-size: 14px; font-weight: 500; border: none; background: transparent;")
-        text_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.btn_browse = QPushButton("Browse file", self)
+        self.btn_browse.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_browse.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #ffffff;
+                color: #111813;
+                border: 1px solid #111813;
+                border-radius: 8px;
+                padding: 8px 24px;
+                font-weight: 600;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #f3f5ee;
+            }
+            """
+        )
+        self.btn_browse.clicked.connect(self.on_browse_clicked)
 
-        layout.addWidget(icon_lbl)
-        layout.addWidget(text_lbl)
+        layout.addWidget(self.lbl_text)
+        layout.addWidget(self.btn_browse, alignment=Qt.AlignmentFlag.AlignCenter)
+
+    def set_selected_filename(self, filename: str) -> None:
+        self.lbl_text.setText(f"Selected: {filename}")
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:
         if event.mimeData().hasUrls():
@@ -57,7 +84,7 @@ class DropZoneWidget(QWidget):
 
 
 class ImportView(QWidget):
-    """Primary import screen for loading playlists."""
+    """Primary import screen matching the editorial design."""
 
     def __init__(
         self,
@@ -65,89 +92,120 @@ class ImportView(QWidget):
         on_parse_requested: Callable[[Path | None, str, str], None],
     ) -> None:
         super().__init__()
+        self.output_dir = default_output_dir
         self.on_parse_requested = on_parse_requested
         self.selected_file_path: Path | None = None
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(16)
+        layout.setContentsMargins(40, 36, 40, 36)
+        layout.setSpacing(20)
 
-        # Title Header
-        header = QLabel("Import Music Playlist", self)
-        header.setStyleSheet("font-size: 20px; font-weight: bold; color: #ffffff;")
-        layout.addWidget(header)
+        # Main Header Title & Subtitle
+        header_box = QVBoxLayout()
+        header_box.setSpacing(6)
 
-        # Drop Zone
-        self.drop_zone = DropZoneWidget(self._handle_file_dropped)
+        title = QLabel("Drop a list.\nGet a folder.", self)
+        title.setStyleSheet("font-size: 36px; font-weight: 800; color: #111813; letter-spacing: -1px; line-height: 1.1;")
+        header_box.addWidget(title)
+
+        subtitle = QLabel("PDF, DOCX, CSV or TXT, one song per line. Everything downloads in the background.", self)
+        subtitle.setStyleSheet("color: #556052; font-size: 14px; font-weight: 500;")
+        header_box.addWidget(subtitle)
+
+        layout.addLayout(header_box)
+
+        # Drag and Drop Box
+        self.drop_zone = DropZoneWidget(self._handle_file_dropped, self._browse_file)
         layout.addWidget(self.drop_zone)
 
-        # Browse file button
-        browse_layout = QHBoxLayout()
-        self.file_label = QLabel("No file selected", self)
-        self.file_label.setStyleSheet("color: #94a3b8;")
-        btn_browse_file = QPushButton("Browse File...", self)
-        btn_browse_file.setObjectName("secondaryButton")
-        btn_browse_file.clicked.connect(self._browse_file)
-        browse_layout.addWidget(self.file_label, 1)
-        browse_layout.addWidget(btn_browse_file)
-        layout.addLayout(browse_layout)
+        # Bottom Row: Two White Cards
+        cards_layout = QHBoxLayout()
+        cards_layout.setSpacing(16)
 
-        # Paste Text Area
-        paste_group = QGroupBox("Or Paste Song Names Directly", self)
-        p_layout = QVBoxLayout(paste_group)
-        self.paste_box = QPlainTextEdit(paste_group)
-        self.paste_box.setPlaceholderText(
-            "Paste songs here (one per line). Examples:\n"
-            "Queen - Bohemian Rhapsody\n"
-            "Imagine by John Lennon\n"
-            "Pink Floyd - Comfortably Numb"
-        )
-        self.paste_box.setMaximumHeight(130)
-        p_layout.addWidget(self.paste_box)
-        layout.addWidget(paste_group)
+        # Left Card: Or Paste Names
+        paste_card = QFrame(self)
+        paste_card.setObjectName("whiteCard")
+        paste_card.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 16px; padding: 14px;")
+        paste_layout = QVBoxLayout(paste_card)
+        paste_layout.setSpacing(8)
 
-        # Output Folder Picker
-        folder_group = QGroupBox("Destination Folder", self)
-        f_layout = QHBoxLayout(folder_group)
-        self.output_dir_input = QLineEdit(default_output_dir, folder_group)
-        btn_browse_dir = QPushButton("Browse...", folder_group)
-        btn_browse_dir.setObjectName("secondaryButton")
-        btn_browse_dir.clicked.connect(self._browse_output_dir)
-        f_layout.addWidget(self.output_dir_input, 1)
-        f_layout.addWidget(btn_browse_dir)
-        layout.addWidget(folder_group)
+        lbl_paste_title = QLabel("OR PASTE NAMES", paste_card)
+        lbl_paste_title.setStyleSheet("font-size: 11px; font-weight: 700; color: #556052; letter-spacing: 0.5px; border: none; background: transparent;")
+        paste_layout.addWidget(lbl_paste_title)
 
-        # Action Buttons
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-        self.btn_parse = QPushButton("Parse & Review Playlist →", self)
-        self.btn_parse.setMinimumHeight(38)
-        self.btn_parse.clicked.connect(self._on_start_clicked)
-        btn_layout.addWidget(self.btn_parse)
-        layout.addLayout(btn_layout)
+        self.paste_box = QPlainTextEdit(paste_card)
+        self.paste_box.setPlaceholderText("Zehnaseeb\nManwa Laage\nArtist - Title also works")
+        self.paste_box.setStyleSheet("background: transparent; border: none; color: #111813; font-family: monospace; font-size: 13px; line-height: 1.4;")
+        self.paste_box.setMinimumHeight(90)
+        paste_layout.addWidget(self.paste_box)
+
+        cards_layout.addWidget(paste_card, 1)
+
+        # Right Card: Save To
+        save_card = QFrame(self)
+        save_card.setObjectName("whiteCard")
+        save_card.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 16px; padding: 14px;")
+        save_layout = QVBoxLayout(save_card)
+        save_layout.setSpacing(8)
+
+        lbl_save_title = QLabel("SAVE TO", save_card)
+        lbl_save_title.setStyleSheet("font-size: 11px; font-weight: 700; color: #556052; letter-spacing: 0.5px; border: none; background: transparent;")
+        save_layout.addWidget(lbl_save_title)
+
+        self.lbl_path = QLabel(self.output_dir, save_card)
+        self.lbl_path.setStyleSheet("font-family: monospace; font-size: 13px; font-weight: 600; color: #111813; border: none; background: transparent;")
+        self.lbl_path.setWordWrap(True)
+        save_layout.addWidget(self.lbl_path)
+
+        save_layout.addStretch()
+
+        btn_change_dir = QPushButton("Change folder", save_card)
+        btn_change_dir.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_change_dir.clicked.connect(self._change_output_dir)
+        save_layout.addWidget(btn_change_dir, alignment=Qt.AlignmentFlag.AlignLeft)
+
+        cards_layout.addWidget(save_card, 1)
+
+        layout.addLayout(cards_layout)
+
+        # Bottom Bar: CTA on Right
+        bottom_bar = QHBoxLayout()
+        bottom_bar.addStretch()
+
+        self.btn_review = QPushButton("Review list →", self)
+        self.btn_review.setObjectName("primaryLimeBtn")
+        self.btn_review.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_review.setMinimumHeight(44)
+        self.btn_review.setStyleSheet("font-size: 14px; padding: 10px 24px;")
+        self.btn_review.clicked.connect(self._on_review_clicked)
+        bottom_bar.addWidget(self.btn_review)
+
+        layout.addLayout(bottom_bar)
+
+    def _handle_file_dropped(self, path: Path) -> None:
+        self.selected_file_path = path
+        self.drop_zone.set_selected_filename(path.name)
 
     def _browse_file(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select Playlist File",
             "",
-            "Playlist Files (*.pdf *.docx *.csv *.txt);;PDF (*.pdf);;DOCX (*.docx);;CSV (*.csv);;TXT (*.txt);;All Files (*.*)",
+            "Supported Files (*.pdf *.docx *.csv *.txt);;PDF (*.pdf);;Word Documents (*.docx);;Text/CSV (*.txt *.csv);;All Files (*.*)",
         )
         if file_path:
             self._handle_file_dropped(Path(file_path))
 
-    def _handle_file_dropped(self, path: Path) -> None:
-        self.selected_file_path = path
-        self.file_label.setText(f"Selected: {path.name} ({path.stat().st_size // 1024} KB)")
-        self.file_label.setStyleSheet("color: #60a5fa; font-weight: 500;")
-
-    def _browse_output_dir(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "Select Destination Folder", self.output_dir_input.text())
+    def _change_output_dir(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Select Output Folder", self.output_dir)
         if folder:
-            self.output_dir_input.setText(folder)
+            self.output_dir = folder
+            self.lbl_path.setText(folder)
+
+    def _on_review_clicked(self) -> None:
+        pasted = self.paste_box.toPlainText()
+        self.on_parse_requested(self.selected_file_path, pasted, self.output_dir)
 
     def _on_start_clicked(self) -> None:
-        pasted = self.paste_box.toPlainText().strip()
-        out_dir = self.output_dir_input.text().strip()
-        self.on_parse_requested(self.selected_file_path, pasted, out_dir)
-
+        """Alias for compatibility with tests."""
+        self._on_review_clicked()

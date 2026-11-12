@@ -7,6 +7,7 @@ from typing import Callable
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QCheckBox,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -21,7 +22,7 @@ from app.core.models import SongEntry
 
 
 class ReviewView(QWidget):
-    """Review screen allowing the user to edit or remove lines before starting."""
+    """Review screen matching custom design with white card table and lime CTA."""
 
     def __init__(
         self,
@@ -34,154 +35,215 @@ class ReviewView(QWidget):
         self.songs: list[SongEntry] = []
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(14)
+        layout.setContentsMargins(40, 36, 40, 36)
+        layout.setSpacing(16)
 
-        # Header bar
+        # Top Header Bar
         top_bar = QHBoxLayout()
-        self.title_label = QLabel("Review Parsed Songs", self)
-        self.title_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #ffffff;")
-        self.count_badge = QLabel("0 songs", self)
-        self.count_badge.setStyleSheet(
-            "background-color: #2563eb; color: #ffffff; padding: 3px 10px; border-radius: 10px; font-weight: bold;"
-        )
+        self.title_label = QLabel("0 songs found", self)
+        self.title_label.setStyleSheet("font-size: 32px; font-weight: 800; color: #111813; letter-spacing: -0.5px;")
         top_bar.addWidget(self.title_label)
-        top_bar.addWidget(self.count_badge)
+
         top_bar.addStretch()
+
+        self.duplicate_badge = QLabel("0 duplicates", self)
+        self.duplicate_badge.setStyleSheet(
+            "background-color: #fce7d8; color: #b45309; padding: 5px 12px; border-radius: 12px; font-weight: 600; font-size: 12px;"
+        )
+        self.duplicate_badge.setVisible(False)
+        top_bar.addWidget(self.duplicate_badge)
+
+        self.btn_remove_dups = QPushButton("Remove duplicates", self)
+        self.btn_remove_dups.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_remove_dups.clicked.connect(self._remove_duplicates)
+        self.btn_remove_dups.setVisible(False)
+        top_bar.addWidget(self.btn_remove_dups)
+
         layout.addLayout(top_bar)
 
-        # Table of parsed items
-        self.table = QTableWidget(self)
-        self.table.setColumnCount(4)
-        self.table.setHorizontalHeaderLabels(["Artist", "Title", "Search Query", "Status"])
+        # Informational Banner
+        self.banner = QFrame(self)
+        self.banner.setStyleSheet(
+            "background-color: #edf7a5; border-radius: 8px; padding: 10px 14px; border: none;"
+        )
+        banner_layout = QHBoxLayout(self.banner)
+        banner_layout.setContentsMargins(10, 8, 10, 8)
+        self.lbl_banner_text = QLabel(
+            "No artists detected. Add one where you can and matches get more accurate.", self.banner
+        )
+        self.lbl_banner_text.setStyleSheet("color: #273815; font-size: 13px; font-weight: 500; border: none; background: transparent;")
+        banner_layout.addWidget(self.lbl_banner_text)
+        layout.addWidget(self.banner)
+
+        # White Card Container for Table
+        table_card = QFrame(self)
+        table_card.setObjectName("whiteCard")
+        table_card.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 16px; padding: 8px;")
+        t_layout = QVBoxLayout(table_card)
+        t_layout.setContentsMargins(4, 4, 4, 4)
+
+        self.table = QTableWidget(table_card)
+        self.table.setColumnCount(5)
+        self.table.setHorizontalHeaderLabels(["#", "TITLE", "ARTIST", "SEARCH QUERY", "STATUS"])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        layout.addWidget(self.table)
+        self.table.setShowGrid(False)
+        self.table.verticalHeader().setVisible(False)
+        self.table.cellChanged.connect(self._on_cell_changed)
+        t_layout.addWidget(self.table)
 
-        # Table management toolbar
-        toolbar = QHBoxLayout()
-        btn_add = QPushButton("+ Add Row", self)
-        btn_add.setObjectName("secondaryButton")
-        btn_add.clicked.connect(self._add_row)
-
-        btn_remove = QPushButton("- Remove Selected", self)
-        btn_remove.setObjectName("secondaryButton")
-        btn_remove.clicked.connect(self._remove_selected)
-
-        btn_remove_dups = QPushButton("Remove Duplicates", self)
-        btn_remove_dups.setObjectName("secondaryButton")
-        btn_remove_dups.clicked.connect(self._remove_duplicates)
-
-        toolbar.addWidget(btn_add)
-        toolbar.addWidget(btn_remove)
-        toolbar.addWidget(btn_remove_dups)
-        toolbar.addStretch()
-        layout.addLayout(toolbar)
+        layout.addWidget(table_card, 1)
 
         # Bottom Action Bar
         bottom_bar = QHBoxLayout()
-        btn_back = QPushButton("← Back to Import", self)
-        btn_back.setObjectName("secondaryButton")
-        btn_back.clicked.connect(self.on_back)
-        bottom_bar.addWidget(btn_back)
+        bottom_bar.setContentsMargins(0, 8, 0, 0)
+
+        self.btn_back = QPushButton("← Back", self)
+        self.btn_back.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_back.setMinimumHeight(42)
+        self.btn_back.clicked.connect(self.on_back)
+        bottom_bar.addWidget(self.btn_back)
 
         bottom_bar.addStretch()
 
-        self.chk_autostart = QCheckBox("Auto-start downloads next time", self)
+        self.chk_autostart = QCheckBox("Auto-start next time", self)
+        self.chk_autostart.setCursor(Qt.CursorShape.PointingHandCursor)
         bottom_bar.addWidget(self.chk_autostart)
 
-        self.btn_start = QPushButton("Start Download Batch ▶", self)
-        self.btn_start.setMinimumHeight(40)
-        self.btn_start.setStyleSheet("padding: 10px 24px; font-size: 14px;")
+        self.btn_start = QPushButton("Start download", self)
+        self.btn_start.setObjectName("primaryLimeBtn")
+        self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_start.setMinimumHeight(44)
+        self.btn_start.setStyleSheet("font-size: 14px; padding: 10px 24px;")
         self.btn_start.clicked.connect(self._on_start_clicked)
         bottom_bar.addWidget(self.btn_start)
 
         layout.addLayout(bottom_bar)
 
-    def populate(self, songs: list[SongEntry]) -> None:
-        """Load parsed songs into the review table."""
-        self.songs = songs
+    def populate_songs(self, songs: list[SongEntry]) -> None:
+        """Load parsed songs into editable table."""
+        self.songs = list(songs)
+        self.table.blockSignals(True)
         self.table.setRowCount(len(songs))
-        dup_count = 0
+
+        missing_artists_count = 0
+        duplicate_count = 0
 
         for row, s in enumerate(songs):
-            item_artist = QTableWidgetItem(s.artist or "")
-            item_title = QTableWidgetItem(s.title)
-            item_query = QTableWidgetItem(s.query)
+            # Column 0: Index #
+            idx_item = QTableWidgetItem(str(row + 1))
+            idx_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            idx_item.setFlags(idx_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            idx_item.setForeground(Qt.GlobalColor.darkGray)
 
-            if s.is_duplicate:
-                dup_count += 1
-                item_status = QTableWidgetItem("Exact Duplicate")
-                item_status.setForeground(Qt.GlobalColor.darkRed)
-            elif s.near_duplicate_of:
-                dup_count += 1
-                item_status = QTableWidgetItem("Near-Duplicate")
-                item_status.setForeground(Qt.GlobalColor.darkYellow)
+            # Column 1: Title
+            tit_item = QTableWidgetItem(s.title)
+            font = tit_item.font()
+            font.setBold(True)
+            tit_item.setFont(font)
+            tit_item.setForeground(Qt.GlobalColor.black)
+
+            # Column 2: Artist
+            if s.artist:
+                art_item = QTableWidgetItem(s.artist)
+                art_item.setForeground(Qt.GlobalColor.black)
             else:
-                item_status = QTableWidgetItem("Ready")
-                item_status.setForeground(Qt.GlobalColor.green)
+                missing_artists_count += 1
+                art_item = QTableWidgetItem("Add artist")
+                art_item.setForeground(Qt.GlobalColor.gray)
 
-            item_status.setFlags(item_status.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            # Column 3: Search Query
+            query_item = QTableWidgetItem(s.query or s.title)
+            query_item.setForeground(Qt.GlobalColor.darkGray)
 
-            self.table.setItem(row, 0, item_artist)
-            self.table.setItem(row, 1, item_title)
-            self.table.setItem(row, 2, item_query)
-            self.table.setItem(row, 3, item_status)
+            # Column 4: Status
+            if s.is_duplicate:
+                duplicate_count += 1
+                st_item = QTableWidgetItem("Duplicate")
+                st_item.setForeground(Qt.GlobalColor.darkYellow)
+            else:
+                st_item = QTableWidgetItem("Ready")
+                st_item.setForeground(Qt.GlobalColor.darkGreen)
+            st_item.setFlags(st_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
-        self.count_badge.setText(f"{len(songs)} songs ({dup_count} duplicate)")
+            self.table.setItem(row, 0, idx_item)
+            self.table.setItem(row, 1, tit_item)
+            self.table.setItem(row, 2, art_item)
+            self.table.setItem(row, 3, query_item)
+            self.table.setItem(row, 4, st_item)
+
+        self.table.blockSignals(False)
+
+        # Update Header and Badge
+        self.title_label.setText(f"{len(songs)} songs found")
+        active_count = len(songs) - duplicate_count
+        self.btn_start.setText(f"Start download · {active_count} songs")
+
+        if duplicate_count > 0:
+            self.duplicate_badge.setText(f"{duplicate_count} duplicate{'s' if duplicate_count > 1 else ''}")
+            self.duplicate_badge.setVisible(True)
+            self.btn_remove_dups.setVisible(True)
+        else:
+            self.duplicate_badge.setVisible(False)
+            self.btn_remove_dups.setVisible(False)
+
+        # Banner visibility
+        if missing_artists_count > len(songs) * 0.4:
+            self.lbl_banner_text.setText("No artists detected on some songs. Add one where you can and matches get more accurate.")
+            self.banner.setVisible(True)
+        else:
+            self.banner.setVisible(False)
+
+    def populate(self, songs: list[SongEntry]) -> None:
+        """Alias for compatibility with tests."""
+        self.populate_songs(songs)
 
     def _add_row(self) -> None:
-        row = self.table.rowCount()
-        self.table.insertRow(row)
-        self.table.setItem(row, 0, QTableWidgetItem("New Artist"))
-        self.table.setItem(row, 1, QTableWidgetItem("New Song"))
-        self.table.setItem(row, 2, QTableWidgetItem("New Artist - New Song"))
-        status_item = QTableWidgetItem("Ready")
-        status_item.setForeground(Qt.GlobalColor.green)
-        status_item.setFlags(status_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-        self.table.setItem(row, 3, status_item)
-        self.count_badge.setText(f"{self.table.rowCount()} songs")
+        """Add a blank row to table for manual entry."""
+        new_song = SongEntry(raw_text="New Track", title="New Track")
+        self.songs.append(new_song)
+        self.populate_songs(self.songs)
 
-    def _remove_selected(self) -> None:
-        selected_rows = sorted({idx.row() for idx in self.table.selectedIndexes()}, reverse=True)
-        for r in selected_rows:
-            self.table.removeRow(r)
-        self.count_badge.setText(f"{self.table.rowCount()} songs")
+    def _on_cell_changed(self, row: int, col: int) -> None:
+        if row < 0 or row >= len(self.songs):
+            return
+        song = self.songs[row]
+        item = self.table.item(row, col)
+        if not item:
+            return
+
+        text = item.text().strip()
+        if col == 1:
+            song.title = text
+            self._update_query_for_song(row, song)
+        elif col == 2:
+            if text and text != "Add artist":
+                song.artist = text
+            else:
+                song.artist = None
+            self._update_query_for_song(row, song)
+        elif col == 3:
+            song.query = text
+
+    def _update_query_for_song(self, row: int, song: SongEntry) -> None:
+        if song.artist:
+            song.query = f"{song.artist} - {song.title}"
+        else:
+            song.query = song.title
+        q_item = self.table.item(row, 3)
+        if q_item:
+            self.table.blockSignals(True)
+            q_item.setText(song.query)
+            self.table.blockSignals(False)
 
     def _remove_duplicates(self) -> None:
-        for r in range(self.table.rowCount() - 1, -1, -1):
-            st_item = self.table.item(r, 3)
-            if st_item and ("Duplicate" in st_item.text()):
-                self.table.removeRow(r)
-        self.count_badge.setText(f"{self.table.rowCount()} songs")
+        self.songs = [s for s in self.songs if not s.is_duplicate]
+        self.populate_songs(self.songs)
 
     def _on_start_clicked(self) -> None:
-        # Collect edited songs from table
-        final_songs: list[SongEntry] = []
-        for r in range(self.table.rowCount()):
-            it_art = self.table.item(r, 0)
-            art = it_art.text().strip() if it_art else None
-
-            it_tit = self.table.item(r, 1)
-            tit = it_tit.text().strip() if it_tit else ""
-
-            it_q = self.table.item(r, 2)
-            q = it_q.text().strip() if it_q else ""
-
-            it_st = self.table.item(r, 3)
-            st = it_st.text() if it_st else ""
-            is_dup = "Duplicate" in st
-
-            if tit:
-                final_songs.append(SongEntry(
-                    raw_text=f"{art or ''} - {tit}".strip(" -"),
-                    title=tit,
-                    artist=art or None,
-                    query=q or tit,
-                    is_duplicate=is_dup,
-                ))
-
-        self.on_start_download(final_songs, self.chk_autostart.isChecked())
+        auto = self.chk_autostart.isChecked()
+        self.on_start_download(self.songs, auto)

@@ -7,8 +7,10 @@ import time
 import uuid
 from pathlib import Path
 
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
+    QFrame,
     QHBoxLayout,
     QLabel,
     QMainWindow,
@@ -46,14 +48,76 @@ from app.ui.widgets.tray import SystemTrayManager
 logger = logging.getLogger(__name__)
 
 
+class SidebarWidget(QWidget):
+    """Left vertical sidebar with editorial branding and step indicators."""
+
+    step_clicked = Signal(int)
+    settings_clicked = Signal()
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("sidebarWidget")
+        self.setFixedWidth(210)
+        self.setStyleSheet("background-color: #121b15; border-right: 1px solid #1c2921;")
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 36, 20, 28)
+        layout.setSpacing(32)
+
+        # App Logo / Title
+        logo = QLabel("Music\nDownloader", self)
+        logo.setObjectName("sidebarLogo")
+        logo.setStyleSheet("color: #ffffff; font-size: 22px; font-weight: 800; line-height: 1.1; border: none; background: transparent;")
+        layout.addWidget(logo)
+
+        # Steps Layout
+        self.steps_layout = QVBoxLayout()
+        self.steps_layout.setSpacing(10)
+
+        self.btn_step1 = self._create_step_btn("(1)   Import", 0)
+        self.btn_step2 = self._create_step_btn("(2)   Review", 1)
+        self.btn_step3 = self._create_step_btn("(3)   Download", 2)
+        self.btn_step4 = self._create_step_btn("(4)   Results", 3)
+
+        self.steps_layout.addWidget(self.btn_step1)
+        self.steps_layout.addWidget(self.btn_step2)
+        self.steps_layout.addWidget(self.btn_step3)
+        self.steps_layout.addWidget(self.btn_step4)
+
+        layout.addLayout(self.steps_layout)
+        layout.addStretch()
+
+        # Settings Button at bottom
+        self.btn_settings = QPushButton("Settings", self)
+        self.btn_settings.setObjectName("sidebarSettingsBtn")
+        self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_settings.clicked.connect(self.settings_clicked.emit)
+        layout.addWidget(self.btn_settings)
+
+    def _create_step_btn(self, text: str, index: int) -> QPushButton:
+        btn = QPushButton(text, self)
+        btn.setObjectName("sidebarStepBtn")
+        btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn.clicked.connect(lambda: self.step_clicked.emit(index))
+        return btn
+
+    def set_active_step(self, index: int) -> None:
+        btns = [self.btn_step1, self.btn_step2, self.btn_step3, self.btn_step4]
+        for i, b in enumerate(btns):
+            is_active = (i == index)
+            b.setProperty("active", "true" if is_active else "false")
+            b.style().unpolish(b)
+            b.style().polish(b)
+
+
 class MainWindow(QMainWindow):
     """Main application window coordinating UI screens and background asyncio tasks."""
 
     def __init__(self, settings_path: Path | None = None) -> None:
         super().__init__()
         self.setWindowTitle("Music Downloader")
-        self.resize(960, 680)
-        self.setMinimumSize(800, 560)
+        self.resize(1080, 700)
+        self.setMinimumSize(880, 600)
         self.setStyleSheet(DARK_THEME_QSS)
 
         # Settings
@@ -80,35 +144,24 @@ class MainWindow(QMainWindow):
         self.ytdlp_pool: YtDlpWorkerPool | None = None
         self._is_quitting = False
 
-        # Initialize UI layout
+        # Central Widget & Horizontal Layout (Sidebar + Content Stack)
         central_widget = QWidget(self)
         central_widget.setObjectName("centralWidget")
         self.setCentralWidget(central_widget)
 
-        main_layout = QVBoxLayout(central_widget)
+        main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Navigation Header Bar
-        nav_bar = QWidget(self)
-        nav_bar.setStyleSheet("background-color: #16181f; border-bottom: 1px solid #23272e;")
-        nav_layout = QHBoxLayout(nav_bar)
-        nav_layout.setContentsMargins(20, 10, 20, 10)
+        # Left Sidebar
+        self.sidebar = SidebarWidget(self)
+        self.sidebar.step_clicked.connect(self._on_sidebar_step_clicked)
+        self.sidebar.settings_clicked.connect(self._open_settings)
+        main_layout.addWidget(self.sidebar)
 
-        logo_lbl = QLabel("🎵 Music Downloader", nav_bar)
-        logo_lbl.setStyleSheet("font-size: 16px; font-weight: bold; color: #ffffff;")
-        nav_layout.addWidget(logo_lbl)
-        nav_layout.addStretch()
-
-        self.btn_settings = QPushButton("⚙ Settings", nav_bar)
-        self.btn_settings.setObjectName("secondaryButton")
-        self.btn_settings.clicked.connect(self._open_settings)
-        nav_layout.addWidget(self.btn_settings)
-
-        main_layout.addWidget(nav_bar)
-
-        # Stacked Screens
+        # Right Content Area (Stacked Screens)
         self.stack = QStackedWidget(self)
+        self.stack.setStyleSheet("background-color: #e6e9e1;")
         main_layout.addWidget(self.stack, 1)
 
         # Build Views
@@ -142,6 +195,9 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.results_view)   # Index 3
         self.stack.addWidget(self.settings_view)  # Index 4
 
+        self.stack.currentChanged.connect(self._on_stack_page_changed)
+        self.sidebar.set_active_step(0)
+
         # System Tray Manager
         self.tray = SystemTrayManager(
             parent=self,
@@ -165,6 +221,21 @@ class MainWindow(QMainWindow):
         # Async initialization
         self.async_thread.submit(self._async_init())
 
+    def _on_sidebar_step_clicked(self, step_idx: int) -> None:
+        """Allow clicking on sidebar steps if relevant data exists."""
+        if step_idx == 0:
+            self.stack.setCurrentIndex(0)
+        elif step_idx == 1 and self.review_view.songs:
+            self.stack.setCurrentIndex(1)
+        elif step_idx == 2 and self.current_jobs:
+            self.stack.setCurrentIndex(2)
+        elif step_idx == 3 and self.results_view.jobs:
+            self.stack.setCurrentIndex(3)
+
+    def _on_stack_page_changed(self, index: int) -> None:
+        """Update active pill indicator in sidebar."""
+        self.sidebar.set_active_step(index if index < 4 else -1)
+
     async def _async_init(self) -> None:
         """Initialize database and check for startup recovery."""
         await self.repo.initialize()
@@ -172,7 +243,6 @@ class MainWindow(QMainWindow):
         if unfinished and self.settings.auto_resume_on_startup:
             logger.info("Found %d unfinished jobs from previous session; auto-resuming", len(unfinished))
             self.bridge.request_toast("Startup Recovery", f"Resuming {len(unfinished)} unfinished downloads...")
-            # Thread-safe dispatch back to Qt UI thread
             self.bridge.resume_jobs_requested.emit(unfinished)
 
     def _on_startup_resume(self, jobs: list[DownloadJob]) -> None:
@@ -198,27 +268,19 @@ class MainWindow(QMainWindow):
                 return
 
             if not doc.songs:
-                self.show_toast("Empty Playlist", "No valid song names found in input.")
+                self.show_toast("Import Warning", "No songs detected in the provided input.")
                 return
 
-            if doc.warnings:
-                self.show_toast("Notice", " ".join(doc.warnings))
-
-            self.review_view.populate(doc.songs)
-            if self.settings.auto_start:
-                self._on_start_download(doc.songs, auto_start=True)
-            else:
-                self.stack.setCurrentIndex(1)  # Show ReviewView
-
+            self.review_view.populate_songs(doc.songs)
+            self.stack.setCurrentIndex(1)  # Show ReviewView
         except Exception as e:
-            logger.error("Parsing failed: %s", e)
-            self.show_toast("Parsing Error", str(e))
+            logger.exception("Parse failed: %s", e)
+            self.show_toast("Parse Error", f"Failed to parse input: {e}")
 
-    def _on_start_download(self, songs: list[SongEntry], auto_start: bool) -> None:
-        """Create batch in DB and initiate background download pipeline."""
-        if auto_start != self.settings.auto_start:
-            self.settings.auto_start = auto_start
-            self.settings.save_to_file(self.settings_path)
+    def _on_start_download(self, songs: list[SongEntry], auto_start: bool = False) -> None:
+        """Prepare batch jobs and transition to download screen."""
+        if not songs:
+            return
 
         self.current_batch_id = str(uuid.uuid4())[:8]
         now = time.time()
