@@ -3,6 +3,12 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
+
+# Ensure src/ is on sys.path so 'app.*' imports resolve cleanly
+_src_dir = str(Path(__file__).resolve().parent.parent)
+if _src_dir not in sys.path:
+    sys.path.insert(0, _src_dir)
 
 
 def main() -> int:
