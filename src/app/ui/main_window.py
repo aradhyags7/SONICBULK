@@ -1,0 +1,380 @@
+"""Main PySide6 Application Window integrating all views, thread-safe bridge, and tray."""
+
+from __future__ import annotations
+
+import logging
+import uuid
+from pathlib import Path
+
+from PySide6.QtGui import QCloseEvent, QKeySequence, QShortcut
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+from app.core.config import AppSettings, get_default_config_path
+from app.core.events import BatchProgressEvent, JobProgressEvent, JobStatusEvent
+from app.core.models import BatchSummary, DownloadJob, SongEntry
+from app.core.sleep_blocker import SleepBlocker
+from app.db.repository import DatabaseRepository
+from app.parse.unified import parse_file, parse_text_input
+from app.pipeline.engine import PipelineEngine
+from app.sources.cache import CachedSourceProvider
+from app.sources.chain import ProviderChain
+from app.sources.direct import DirectURLProvider
+from app.sources.internet_archive import InternetArchiveProvider
+from app.sources.jamendo import JamendoProvider
+from app.sources.ytdlp_pool import YtDlpWorkerPool
+from app.sources.ytdlp_provider import YtDlpProvider
+from app.ui.bridge import AsyncWorkerThread, QtBridge
+from app.ui.theme import DARK_THEME_QSS
+from app.ui.views.import_view import ImportView
+from app.ui.views.progress_view import ProgressView
+from app.ui.views.results_view import ResultsView
+from app.ui.views.review_view import ReviewView
+from app.ui.views.settings_view import SettingsView
+from app.ui.widgets.toast import ToastNotification
+from app.ui.widgets.tray import SystemTrayManager
+
+logger = logging.getLogger(__name__)
+
+
+class MainWindow(QMainWindow):
+    """Main application window coordinating UI screens and background asyncio tasks."""
+
+    def __init__(self, settings_path: Path | None = None) -> None:
+        super().__init__()
+        self.setWindowTitle("Music Downloader")
+        self.resize(960, 680)
+        self.setMinimumSize(800, 560)
+        self.setStyleSheet(DARK_THEME_QSS)
+
+        # Settings
+        self.settings_path = settings_path or get_default_config_path()
+        self.settings = AppSettings.load_from_file(self.settings_path)
+
+        # Database
+        db_path = self.settings_path.parent / "jobs.db"
+        self.repo = DatabaseRepository(db_path)
+
+        # Async background worker thread & Qt signal bridge
+        self.async_thread = AsyncWorkerThread()
+        self.async_thread.start()
+        self.async_thread.wait_started()
+
+        self.bridge = QtBridge()
+        self.sleep_blocker = SleepBlocker()
+
+        # State tracking
+        self.current_batch_id = ""
+        self.current_jobs: list[DownloadJob] = []
+        self.pipeline_engine: PipelineEngine | None = None
+        self.ytdlp_pool: YtDlpWorkerPool | None = None
+        self._is_quitting = False
+
+        # Initialize UI layout
+        central_widget = QWidget(self)
+        central_widget.setObjectName("centralWidget")
+        self.setCentralWidget(central_widget)
+
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Navigation Header Bar
+        nav_bar = QWidget(self)
+        nav_bar.setStyleSheet("background-color: #16181f; border-bottom: 1px solid #23272e;")
+        nav_layout = QHBoxLayout(nav_bar)
+        nav_layout.setContentsMargins(20, 10, 20, 10)
+
+        logo_lbl = QLabel("🎵 Music Downloader", nav_bar)
+        logo_lbl.setStyleSheet("font-size: 16px; font-weight: bold; color: #ffffff;")
+        nav_layout.addWidget(logo_lbl)
+        nav_layout.addStretch()
+
+        self.btn_settings = QPushButton("⚙ Settings", nav_bar)
+        self.btn_settings.setObjectName("secondaryButton")
+        self.btn_settings.clicked.connect(self._open_settings)
+        nav_layout.addWidget(self.btn_settings)
+
+        main_layout.addWidget(nav_bar)
+
+        # Stacked Screens
+        self.stack = QStackedWidget(self)
+        main_layout.addWidget(self.stack, 1)
+
+        # Build Views
+        self.import_view = ImportView(
+            default_output_dir=self.settings.output_dir,
+            on_parse_requested=self._on_parse_requested,
+        )
+        self.review_view = ReviewView(
+            on_start_download=self._on_start_download,
+            on_back=lambda: self.stack.setCurrentIndex(0),
+        )
+        self.progress_view = ProgressView(
+            on_pause_toggled=self._on_pause_toggled,
+            on_cancel=self._on_cancel_requested,
+        )
+        self.results_view = ResultsView(
+            output_dir=self.settings.output_dir,
+            on_retry_failed=self._on_retry_failed,
+            on_new_import=lambda: self.stack.setCurrentIndex(0),
+            fetch_candidates_func=self._fetch_candidates_sync,
+        )
+        self.settings_view = SettingsView(
+            settings=self.settings,
+            on_save_settings=self._on_save_settings,
+            on_back=lambda: self.stack.setCurrentIndex(0),
+        )
+
+        self.stack.addWidget(self.import_view)    # Index 0
+        self.stack.addWidget(self.review_view)    # Index 1
+        self.stack.addWidget(self.progress_view)  # Index 2
+        self.stack.addWidget(self.results_view)   # Index 3
+        self.stack.addWidget(self.settings_view)  # Index 4
+
+        # System Tray Manager
+        self.tray = SystemTrayManager(
+            parent=self,
+            on_toggle_visible=self._toggle_visibility,
+            on_exit=self._force_exit,
+        )
+
+        # Wire Bridge signals to UI
+        self.bridge.job_status_changed.connect(self.progress_view.update_job_status)
+        self.bridge.job_progress_changed.connect(self.progress_view.update_job_progress)
+        self.bridge.batch_progress_changed.connect(self._on_batch_progress_update)
+        self.bridge.batch_finished.connect(self._on_batch_finished)
+        self.bridge.toast_requested.connect(self.show_toast)
+
+        # Keyboard shortcuts
+        QShortcut(QKeySequence("Ctrl+O"), self, self.import_view._browse_file)
+        QShortcut(QKeySequence("Ctrl+,"), self, self._open_settings)
+        QShortcut(QKeySequence("Esc"), self, self._on_escape_pressed)
+
+        # Async initialization
+        self.async_thread.submit(self._async_init())
+
+    async def _async_init(self) -> None:
+        """Initialize database and check for startup recovery."""
+        await self.repo.initialize()
+        unfinished = await self.repo.get_unfinished_jobs()
+        if unfinished and self.settings.auto_resume_on_startup:
+            logger.info("Found %d unfinished jobs from previous session; auto-resuming", len(unfinished))
+            self.bridge.request_toast("Startup Recovery", f"Resuming {len(unfinished)} unfinished downloads...")
+            # Schedule resume on UI
+            self.current_jobs = unfinished
+            self.current_batch_id = unfinished[0].batch_id
+            self.progress_view.initialize_batch(unfinished)
+            self.stack.setCurrentIndex(2)
+            await self._run_pipeline(self.current_batch_id, unfinished)
+
+    def _on_parse_requested(self, file_path: Path | None, pasted_text: str, output_dir: str) -> None:
+        """Parse input and move to Review screen."""
+        if output_dir:
+            self.settings.output_dir = output_dir
+
+        try:
+            if file_path and file_path.is_file():
+                doc = parse_file(file_path)
+            elif pasted_text:
+                doc = parse_text_input(pasted_text)
+            else:
+                self.show_toast("Import Error", "Please drop a file or paste song names.")
+                return
+
+            if not doc.songs:
+                self.show_toast("Empty Playlist", "No valid song names found in input.")
+                return
+
+            if doc.warnings:
+                self.show_toast("Notice", " ".join(doc.warnings))
+
+            self.review_view.populate(doc.songs)
+            if self.settings.auto_start:
+                self._on_start_download(doc.songs, auto_start=True)
+            else:
+                self.stack.setCurrentIndex(1)  # Show ReviewView
+
+        except Exception as e:
+            logger.error("Parsing failed: %s", e)
+            self.show_toast("Parsing Error", str(e))
+
+    def _on_start_download(self, songs: list[SongEntry], auto_start: bool) -> None:
+        """Create batch in DB and initiate background download pipeline."""
+        if auto_start != self.settings.auto_start:
+            self.settings.auto_start = auto_start
+            self.settings.save_to_file(self.settings_path)
+
+        self.current_batch_id = str(uuid.uuid4())[:8]
+        self.async_thread.submit(self._start_batch_async(self.current_batch_id, songs))
+
+    async def _start_batch_async(self, batch_id: str, songs: list[SongEntry]) -> None:
+        jobs = await self.repo.create_batch(batch_id, songs)
+        self.current_jobs = jobs
+        self.progress_view.initialize_batch(jobs)
+        self.stack.setCurrentIndex(2)  # Show ProgressView
+        await self._run_pipeline(batch_id, jobs)
+
+    async def _run_pipeline(self, batch_id: str, jobs: list[DownloadJob]) -> None:
+        """Build provider chain and run pipeline in asyncio thread."""
+        if self.settings.prevent_sleep:
+            self.sleep_blocker.enable()
+
+        providers = [
+            InternetArchiveProvider(),
+            JamendoProvider(client_id=self.settings.jamendo_client_id),
+            DirectURLProvider(),
+        ]
+        if self.settings.ytdlp_enabled:
+            if self.ytdlp_pool is None:
+                self.ytdlp_pool = YtDlpWorkerPool(pool_size=2)
+                await self.ytdlp_pool.start()
+            providers.insert(0, YtDlpProvider(pool=self.ytdlp_pool, enabled=True))
+
+        chain = ProviderChain(providers)
+        cached_provider = CachedSourceProvider(chain, repository=self.repo, ttl_hours=self.settings.cache_ttl_hours)
+
+        # Pipe events to Qt bridge
+        from app.core.events import EventBus
+        bus = EventBus()
+        bus.subscribe(JobStatusEvent, lambda ev: self.bridge.on_job_status_event(ev) if isinstance(ev, JobStatusEvent) else None)
+        bus.subscribe(JobProgressEvent, lambda ev: self.bridge.on_job_progress_event(ev) if isinstance(ev, JobProgressEvent) else None)
+        bus.subscribe(BatchProgressEvent, lambda ev: self.bridge.on_batch_progress_event(ev) if isinstance(ev, BatchProgressEvent) else None)
+
+        self.pipeline_engine = PipelineEngine(
+            settings=self.settings,
+            repository=self.repo,
+            provider=cached_provider,
+            event_bus=bus,
+        )
+        await self.pipeline_engine.initialize()
+
+        try:
+            summary = await self.pipeline_engine.run_batch(batch_id, jobs)
+            self.bridge.notify_batch_finished(summary)
+        finally:
+            if self.settings.prevent_sleep:
+                self.sleep_blocker.disable()
+
+    def _on_batch_progress_update(
+        self,
+        batch_id: str,
+        total: int,
+        completed: int,
+        downloaded: int,
+        skipped: int,
+        not_found: int,
+        failed: int,
+        active: int,
+        total_speed_bps: float,
+    ) -> None:
+        self.progress_view.update_batch_progress(
+            total=total,
+            completed=completed,
+            downloaded=downloaded,
+            skipped=skipped,
+            not_found=not_found,
+            failed=failed,
+            active=active,
+            total_speed_bps=total_speed_bps,
+        )
+        self.tray.update_tooltip(completed, total, total_speed_bps)
+
+    def _on_batch_finished(self, summary_obj: object) -> None:
+        summary = summary_obj if isinstance(summary_obj, BatchSummary) else BatchSummary(
+            batch_id="", total=0, downloaded=0, skipped=0, not_found=0, failed=0, duration_seconds=0.0
+        )
+        self.results_view.populate_results(summary, self.current_jobs)
+        self.stack.setCurrentIndex(3)  # Show ResultsView
+        self.tray.notify_completion(summary.downloaded, summary.not_found, summary.failed)
+        self.show_toast("Batch Complete", f"{summary.downloaded} downloaded, {summary.failed} failed.")
+
+    def _on_retry_failed(self, failed_jobs: list[DownloadJob]) -> None:
+        """One-click retry of failed or not found songs."""
+        songs = [j.song for j in failed_jobs]
+        self._on_start_download(songs, auto_start=False)
+
+    def _on_pause_toggled(self, is_paused: bool) -> None:
+        if self.pipeline_engine:
+            if is_paused:
+                self.pipeline_engine.pause()
+            else:
+                self.pipeline_engine.resume()
+
+    def _on_cancel_requested(self) -> None:
+        if self.pipeline_engine:
+            self.pipeline_engine.cancel()
+            self.show_toast("Cancelled", "Cancelling remaining downloads safely...")
+
+    def _fetch_candidates_sync(self, job_id: str) -> list:
+        future = self.async_thread.submit(self.repo.get_candidates(job_id))
+        try:
+            return future.result(timeout=2.0)
+        except Exception:
+            return []
+
+    def _open_settings(self) -> None:
+        self.stack.setCurrentIndex(4)
+
+    def _on_save_settings(self, new_settings: AppSettings) -> None:
+        self.settings = new_settings
+        self.settings.save_to_file(self.settings_path)
+        self.show_toast("Settings Saved", "Preferences updated successfully.")
+        self.stack.setCurrentIndex(0)
+
+    def show_toast(self, title: str, message: str) -> None:
+        toast = ToastNotification(self, title, message)
+        toast.show_toast()
+
+    def _toggle_visibility(self) -> None:
+        if self.isVisible():
+            self.hide()
+        else:
+            self.showNormal()
+            self.activateWindow()
+
+    def _on_escape_pressed(self) -> None:
+        if self.stack.currentIndex() != 0:
+            self.stack.setCurrentIndex(0)
+
+    def _force_exit(self) -> None:
+        self._is_quitting = True
+        self.close()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        """Handle window close event with graceful shutdown within 3 seconds."""
+        if not self._is_quitting and self.pipeline_engine and self.pipeline_engine.active_downloads_count > 0:
+            reply = QMessageBox.question(
+                self,
+                "Active Downloads",
+                "Downloads are currently in progress. Do you want to minimize to the system tray instead of exiting?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.hide()
+                event.ignore()
+                return
+
+        # Perform graceful shutdown within 3 seconds
+        logger.info("Initiating graceful shutdown...")
+        if self.pipeline_engine:
+            self.pipeline_engine.cancel()
+
+        if self.settings.prevent_sleep:
+            self.sleep_blocker.disable()
+
+        # Stop background thread and close resources
+        if self.ytdlp_pool:
+            self.async_thread.submit(self.ytdlp_pool.close())
+        self.async_thread.submit(self.repo.close())
+        self.async_thread.stop()
+
+        event.accept()
