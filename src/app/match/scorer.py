@@ -45,24 +45,33 @@ def score_candidate(song: SongEntry, candidate: Candidate) -> MatchDecision:
     cand_title_lower = candidate.title.lower()
     cand_artist_lower = (candidate.artist or "").lower()
 
-    # 1. Title Similarity
+    # 1. Title Similarity (token set ratio + raw query check + substring check)
     title_sim = fuzz.token_set_ratio(user_title_lower, cand_title_lower) / 100.0
+    raw_sim = fuzz.token_set_ratio(user_raw_lower, cand_title_lower) / 100.0
+    title_sim = max(title_sim, raw_sim)
 
-    # 2. Artist Similarity
+    # Substring boost: if user's title is cleanly contained in the candidate title
+    clean_user_title = re.sub(r"[^\w\s]", "", user_title_lower).strip()
+    clean_cand_title = re.sub(r"[^\w\s]", "", cand_title_lower).strip()
+    if clean_user_title and clean_user_title in clean_cand_title:
+        title_sim = max(title_sim, 0.95)
+
+    # 2. Artist Similarity (checks candidate channel AND candidate title)
     if user_artist_lower:
-        if cand_artist_lower:
-            artist_sim = fuzz.token_set_ratio(user_artist_lower, cand_artist_lower) / 100.0
-        else:
-            # Check if artist is mentioned in candidate title
-            artist_in_title_sim = fuzz.partial_ratio(user_artist_lower, cand_title_lower) / 100.0
-            artist_sim = artist_in_title_sim * 0.9
+        sim_channel = fuzz.token_set_ratio(user_artist_lower, cand_artist_lower) / 100.0 if cand_artist_lower else 0.0
+        # On YouTube/streaming, artist name is often in the video title rather than the record label channel
+        sim_in_title = fuzz.token_set_ratio(user_artist_lower, cand_title_lower) / 100.0
+        artist_sim = max(sim_channel, sim_in_title)
     else:
         # User did not specify artist (free-text query)
         artist_sim = 1.0
 
     # 3. Base composite score (60% title, 40% artist)
     if user_artist_lower:
-        base_score = (0.60 * title_sim) + (0.40 * artist_sim)
+        if title_sim >= 0.80:
+            base_score = max(title_sim * 0.85, (0.60 * title_sim) + (0.40 * artist_sim))
+        else:
+            base_score = (0.60 * title_sim) + (0.40 * artist_sim)
     else:
         base_score = title_sim
 

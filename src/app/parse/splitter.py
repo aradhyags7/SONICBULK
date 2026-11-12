@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import re
 
+from rapidfuzz import fuzz
+
 # Match "by" as a word separator: e.g. "Bohemian Rhapsody by Queen"
 _RE_BY_SEP = re.compile(r"\s+\bby\b\s+", re.IGNORECASE)
 
@@ -33,11 +35,15 @@ def split_artist_title(line: str) -> tuple[str | None, str]:
     # Check for dash delimiters first (highest priority in standard tracklists)
     for sep in _DASH_DELIMITERS:
         if sep in clean:
-            parts = clean.split(sep, 1)
-            artist = parts[0].strip(' "“\'')
-            title = parts[1].strip(' "“\'')
-            if artist and title:
-                return artist, title
+            all_parts = [p.strip(' "“\'') for p in clean.split(sep) if p.strip(' "“\'')]
+            if len(all_parts) >= 3:
+                # Detect playlist metadata sandwich: e.g. "Title - Category - Language - Title"
+                if fuzz.ratio(all_parts[0].lower(), all_parts[-1].lower()) >= 75:
+                    return None, all_parts[0]
+                # Standard 3-part: "Artist - Title - Album/Year"
+                return all_parts[0], all_parts[1]
+            elif len(all_parts) == 2:
+                return all_parts[0], all_parts[1]
 
     # Check for colon delimiter: e.g. "Queen: Bohemian Rhapsody"
     if ":" in clean:

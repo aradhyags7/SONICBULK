@@ -246,9 +246,38 @@ class PipelineEngine:
                 self._publish_job_status(job)
 
                 candidates = await self.provider.search(job.song.query, limit=10)
-                await self.repository.save_candidates(job.id, candidates)
-
                 decision = self.matcher.match_song(job.song, candidates)
+
+                # Fallback 1: if query was long/messy, retry with clean title
+                if (decision.confidence == Confidence.NONE or decision.candidate is None) and job.song.title and job.song.title != job.song.query:
+                    fallback_cands = await self.provider.search(job.song.title, limit=10)
+                    if fallback_cands:
+                        candidates = fallback_cands
+                        decision = self.matcher.match_song(job.song, candidates)
+
+                # Fallback 2: retry with '{title} song'
+                if (decision.confidence == Confidence.NONE or decision.candidate is None) and job.song.title:
+                    fallback_song_cands = await self.provider.search(f"{job.song.title} song", limit=10)
+                    if fallback_song_cands:
+                        candidates = fallback_song_cands
+                        decision = self.matcher.match_song(job.song, candidates)
+
+                # Fallback 3: if candidates exist with positive score >= 0.20, accept top as LOW confidence rather than failing
+                if (decision.confidence == Confidence.NONE or decision.candidate is None) and candidates:
+                    ranked = self.matcher.rank_candidates(job.song, candidates)
+                    if ranked and ranked[0][1].score >= 0.20:
+                        top_cand, top_dec = ranked[0]
+                        decision = MatchDecision(
+                            candidate=top_cand,
+                            confidence=Confidence.LOW,
+                            score=top_dec.score,
+                            title_similarity=top_dec.title_similarity,
+                            artist_similarity=top_dec.artist_similarity,
+                            penalty_applied=top_dec.penalty_applied,
+                            reason=f"Accepted best available candidate ({top_dec.score:.2f})",
+                        )
+
+                await self.repository.save_candidates(job.id, candidates)
                 job.match_decision = decision
 
                 if decision.confidence == Confidence.NONE or decision.candidate is None:

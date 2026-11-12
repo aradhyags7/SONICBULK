@@ -45,7 +45,7 @@ class AppSettings:
     tag_concurrency: int = 4
     per_host_limit: int = 4
     threshold_high: float = 0.85
-    threshold_low: float = 0.55
+    threshold_low: float = 0.40
     providers: list[str] = field(default_factory=lambda: ["ytdlp", "archive", "jamendo", "direct"])
     ytdlp_enabled: bool = True
     jamendo_client_id: str = "a568ee4d"  # Default public developer test client ID
