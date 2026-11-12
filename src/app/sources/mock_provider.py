@@ -92,3 +92,4 @@ class MockProvider(SourceProvider):
             etag='"mock-etag-v1"',
             format="mp3",
         )
+

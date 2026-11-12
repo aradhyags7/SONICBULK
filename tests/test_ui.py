@@ -164,4 +164,7 @@ def test_main_window_lifecycle(qapp: QApplication, tmp_path: Path) -> None:
     win._open_settings()
     assert win.stack.currentIndex() == 4
 
+    # Allow async init to settle before exit
+    import time
+    time.sleep(0.05)
     win._force_exit()

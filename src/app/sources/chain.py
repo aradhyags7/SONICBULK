@@ -51,3 +51,4 @@ class ProviderChain(SourceProvider):
                 logger.warning("Failed to resolve candidate '%s' via '%s': %s", candidate.title, provider.name, e)
 
         raise RuntimeError(f"Unable to resolve candidate '{candidate.title}' across any provider: {last_err}")
+

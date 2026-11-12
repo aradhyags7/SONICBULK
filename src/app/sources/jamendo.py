@@ -92,3 +92,4 @@ class JamendoProvider(SourceProvider):
             mime_type="audio/mpeg",
             format="mp3",
         )
+

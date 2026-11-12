@@ -87,3 +87,4 @@ class SystemTrayManager(QObject):
             QSystemTrayIcon.MessageIcon.Information,
             5000,
         )
+

@@ -38,3 +38,4 @@ def setup_logging(log_dir: Path | str | None = None, level: int = logging.INFO) 
         )
         file_handler.setFormatter(file_format)
         root_logger.addHandler(file_handler)
+

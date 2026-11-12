@@ -3,3 +3,4 @@
 from app.cli.app_cli import main
 
 __all__ = ["main"]
+

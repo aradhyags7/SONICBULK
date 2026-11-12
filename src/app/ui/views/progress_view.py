@@ -261,3 +261,4 @@ class ProgressView(QWidget):
         self.is_paused = not self.is_paused
         self.btn_pause.setText("Resume" if self.is_paused else "Pause")
         self.on_pause_toggled(self.is_paused)
+

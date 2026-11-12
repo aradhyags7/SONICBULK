@@ -78,3 +78,4 @@ class DirectURLProvider(SourceProvider):
             etag=etag,
             format=ext,
         )
+

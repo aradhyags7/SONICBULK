@@ -150,3 +150,4 @@ class ImportView(QWidget):
         pasted = self.paste_box.toPlainText().strip()
         out_dir = self.output_dir_input.text().strip()
         self.on_parse_requested(self.selected_file_path, pasted, out_dir)
+

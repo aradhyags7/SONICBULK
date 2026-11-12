@@ -108,3 +108,4 @@ def _tag_ogg(path: Path, title: str, artist: str | None, album: str | None) -> N
     if album:
         audio["album"] = album
     audio.save()
+

@@ -108,3 +108,4 @@ def generate_output_path(
         full_path = folder / sanitized_name
 
     return full_path
+

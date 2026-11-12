@@ -373,8 +373,14 @@ class MainWindow(QMainWindow):
 
         # Stop background thread and close resources
         if self.ytdlp_pool:
-            self.async_thread.submit(self.ytdlp_pool.close())
-        self.async_thread.submit(self.repo.close())
+            try:
+                self.async_thread.submit(self.ytdlp_pool.close()).result(timeout=1.0)
+            except Exception:
+                pass
+        try:
+            self.async_thread.submit(self.repo.close()).result(timeout=1.0)
+        except Exception:
+            pass
         self.async_thread.stop()
 
         event.accept()

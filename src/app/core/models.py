@@ -167,3 +167,4 @@ class BatchSummary:
     not_found: int
     failed: int
     duration_seconds: float
+

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import sqlite3
@@ -46,6 +47,7 @@ class DatabaseRepository:
         if self._conn:
             await self._conn.close()
             self._conn = None
+            await asyncio.sleep(0.02)
 
     def _ensure_conn(self) -> aiosqlite.Connection:
         if self._conn is None:
@@ -375,3 +377,4 @@ class DatabaseRepository:
                     pass
 
         return job
+

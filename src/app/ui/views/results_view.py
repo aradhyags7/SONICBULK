@@ -255,3 +255,4 @@ class ResultsView(QWidget):
                 os.startfile(str(p))
             else:
                 subprocess.run(["xdg-open", str(p)], check=False)
+

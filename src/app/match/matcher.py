@@ -77,3 +77,4 @@ class MatchEngine:
             )
             logger.info("Match result for '%s': NOT FOUND (top candidate score %.2f < %.2f)", song.query, score, self.threshold_low)
             return decision
+

@@ -27,3 +27,4 @@ class SourceProvider(abc.ABC):
     @abc.abstractmethod
     async def resolve(self, candidate: Candidate) -> StreamInfo:
         """Resolve a candidate to a playable/downloadable audio stream."""
+

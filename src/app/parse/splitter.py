@@ -58,3 +58,4 @@ def split_artist_title(line: str) -> tuple[str | None, str]:
 
     # No delimiter found: treat whole line as title / free-text query
     return None, clean
+

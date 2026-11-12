@@ -24,3 +24,4 @@ class ParsedDocument:
     source_path: Path | None = None
     is_scanned: bool = False
     total_raw_lines: int = 0
+

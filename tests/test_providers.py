@@ -86,3 +86,4 @@ async def test_cached_source_provider(test_repo: DatabaseRepository) -> None:
     stream2 = await cached.resolve(res1[0])
     assert inner.resolve_calls == 1  # Still 1!
     assert stream2.url == stream1.url
+

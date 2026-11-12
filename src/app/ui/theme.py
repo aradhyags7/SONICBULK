@@ -175,3 +175,4 @@ QGroupBox::title {
     left: 12px;
 }
 """
+

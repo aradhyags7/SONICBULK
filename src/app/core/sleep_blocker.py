@@ -50,3 +50,4 @@ class SleepBlocker:
                 logger.warning("Failed to reset thread execution state: %s", e)
         else:
             self.is_blocking = False
+

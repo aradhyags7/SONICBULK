@@ -27,3 +27,4 @@ def check_disk_space(target_dir: Path | str, min_free_mb: int = 500) -> tuple[bo
     except Exception:
         # If unable to determine, assume sufficient
         return True, 999999
+
