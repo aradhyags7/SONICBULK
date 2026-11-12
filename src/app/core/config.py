@@ -22,8 +22,8 @@ class AppSettings:
     per_host_limit: int = 4
     threshold_high: float = 0.85
     threshold_low: float = 0.55
-    providers: list[str] = field(default_factory=lambda: ["archive", "jamendo", "direct"])
-    ytdlp_enabled: bool = False
+    providers: list[str] = field(default_factory=lambda: ["ytdlp", "archive", "jamendo", "direct"])
+    ytdlp_enabled: bool = True
     jamendo_client_id: str = "a568ee4d"  # Default public developer test client ID
     cache_ttl_hours: int = 24
     max_retries: int = 6

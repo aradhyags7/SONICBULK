@@ -160,3 +160,4 @@ To compile the application into a standalone Windows binary:
 pyinstaller app.spec
 ```
 The resulting executable will be placed in `dist/MusicDownloader.exe`.
+

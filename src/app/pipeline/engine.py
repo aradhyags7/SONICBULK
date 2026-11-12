@@ -121,6 +121,7 @@ class PipelineEngine:
 
     async def close(self) -> None:
         """Close shared resources gracefully."""
+        self.cancel()
         if self.session and not self.session.closed:
             await self.session.close()
 

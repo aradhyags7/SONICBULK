@@ -56,35 +56,42 @@ class DatabaseRepository:
 
     async def create_batch(self, batch_id: str, songs: list[SongEntry]) -> list[DownloadJob]:
         """Insert a batch and its associated song jobs in a single transaction."""
+        now = time.time()
+        jobs = [DownloadJob(song=song, batch_id=batch_id, created_at=now, updated_at=now) for song in songs]
+        return await self.create_batch_from_jobs(batch_id, jobs)
+
+    async def create_batch_from_jobs(self, batch_id: str, jobs: list[DownloadJob]) -> list[DownloadJob]:
+        """Insert pre-created jobs for a batch in a single atomic transaction."""
         conn = self._ensure_conn()
         now = time.time()
-        jobs: list[DownloadJob] = []
 
         await conn.execute(
             "INSERT INTO batches (id, created_at, updated_at, total, status) VALUES (?, ?, ?, ?, ?)",
-            (batch_id, now, now, len(songs), "active"),
+            (batch_id, now, now, len(jobs), "active"),
         )
 
         job_records: list[tuple[Any, ...]] = []
-        for song in songs:
-            job = DownloadJob(song=song, batch_id=batch_id, created_at=now, updated_at=now)
-            jobs.append(job)
+        for job in jobs:
+            if not job.created_at:
+                job.created_at = now
+            if not job.updated_at:
+                job.updated_at = now
             job_records.append((
                 job.id,
                 batch_id,
-                song.raw_text,
-                song.title,
-                song.artist,
-                song.query,
-                song.normalized_key,
+                job.song.raw_text,
+                job.song.title,
+                job.song.artist,
+                job.song.query,
+                job.song.normalized_key,
                 job.status.value,
-                None,
-                None,
-                0,
-                None,
-                0.0,
-                now,
-                now,
+                job.error_message,
+                job.output_path,
+                job.bytes_downloaded,
+                job.total_bytes,
+                job.speed_bps,
+                job.created_at,
+                job.updated_at,
             ))
 
         await conn.executemany(

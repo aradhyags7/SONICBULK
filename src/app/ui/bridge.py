@@ -69,6 +69,7 @@ class QtBridge(QObject):
     batch_progress_changed = Signal(str, int, int, int, int, int, int, int, float)  # stats
     batch_finished = Signal(object)  # BatchSummary
     toast_requested = Signal(str, str)  # (title, message)
+    resume_jobs_requested = Signal(list)  # list[DownloadJob]
 
     def __init__(self) -> None:
         super().__init__()

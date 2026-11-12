@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from pathlib import Path
 
@@ -153,6 +154,7 @@ class MainWindow(QMainWindow):
         self.bridge.batch_progress_changed.connect(self._on_batch_progress_update)
         self.bridge.batch_finished.connect(self._on_batch_finished)
         self.bridge.toast_requested.connect(self.show_toast)
+        self.bridge.resume_jobs_requested.connect(self._on_startup_resume)
 
         # Keyboard shortcuts
         QShortcut(QKeySequence("Ctrl+O"), self, self.import_view._browse_file)
@@ -169,12 +171,16 @@ class MainWindow(QMainWindow):
         if unfinished and self.settings.auto_resume_on_startup:
             logger.info("Found %d unfinished jobs from previous session; auto-resuming", len(unfinished))
             self.bridge.request_toast("Startup Recovery", f"Resuming {len(unfinished)} unfinished downloads...")
-            # Schedule resume on UI
-            self.current_jobs = unfinished
-            self.current_batch_id = unfinished[0].batch_id
-            self.progress_view.initialize_batch(unfinished)
-            self.stack.setCurrentIndex(2)
-            await self._run_pipeline(self.current_batch_id, unfinished)
+            # Thread-safe dispatch back to Qt UI thread
+            self.bridge.resume_jobs_requested.emit(unfinished)
+
+    def _on_startup_resume(self, jobs: list[DownloadJob]) -> None:
+        """Handle startup recovery on the main Qt thread."""
+        self.current_jobs = jobs
+        self.current_batch_id = jobs[0].batch_id
+        self.progress_view.initialize_batch(jobs)
+        self.stack.setCurrentIndex(2)
+        self.async_thread.submit(self._run_pipeline(self.current_batch_id, jobs))
 
     def _on_parse_requested(self, file_path: Path | None, pasted_text: str, output_dir: str) -> None:
         """Parse input and move to Review screen."""
@@ -214,14 +220,33 @@ class MainWindow(QMainWindow):
             self.settings.save_to_file(self.settings_path)
 
         self.current_batch_id = str(uuid.uuid4())[:8]
-        self.async_thread.submit(self._start_batch_async(self.current_batch_id, songs))
+        now = time.time()
+        self.current_jobs = [
+            DownloadJob(
+                id=str(uuid.uuid4()),
+                song=s,
+                batch_id=self.current_batch_id,
+                created_at=now,
+                updated_at=now,
+            )
+            for s in songs
+        ]
 
-    async def _start_batch_async(self, batch_id: str, songs: list[SongEntry]) -> None:
-        jobs = await self.repo.create_batch(batch_id, songs)
-        self.current_jobs = jobs
-        self.progress_view.initialize_batch(jobs)
+        # Initialize progress table and switch view strictly on the main GUI thread
+        self.progress_view.initialize_batch(self.current_jobs)
         self.stack.setCurrentIndex(2)  # Show ProgressView
-        await self._run_pipeline(batch_id, jobs)
+
+        self.async_thread.submit(self._start_batch_async(self.current_batch_id, self.current_jobs))
+
+    async def _start_batch_async(self, batch_id: str, jobs: list[DownloadJob]) -> None:
+        try:
+            if self.repo._conn is None:
+                await self.repo.initialize()
+            await self.repo.create_batch_from_jobs(batch_id, jobs)
+            await self._run_pipeline(batch_id, jobs)
+        except Exception as e:
+            logger.exception("Batch pipeline failed: %s", e)
+            self.bridge.request_toast("Error", f"Download failed: {e}")
 
     async def _run_pipeline(self, batch_id: str, jobs: list[DownloadJob]) -> None:
         """Build provider chain and run pipeline in asyncio thread."""
@@ -372,6 +397,11 @@ class MainWindow(QMainWindow):
             self.sleep_blocker.disable()
 
         # Stop background thread and close resources
+        if self.pipeline_engine:
+            try:
+                self.async_thread.submit(self.pipeline_engine.close()).result(timeout=1.0)
+            except Exception:
+                pass
         if self.ytdlp_pool:
             try:
                 self.async_thread.submit(self.ytdlp_pool.close()).result(timeout=1.0)

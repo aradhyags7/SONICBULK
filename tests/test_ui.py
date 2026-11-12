@@ -168,3 +168,26 @@ def test_main_window_lifecycle(qapp: QApplication, tmp_path: Path) -> None:
     import time
     time.sleep(0.05)
     win._force_exit()
+
+
+def test_main_window_start_download_flow(qapp: QApplication, tmp_path: Path) -> None:
+    settings_file = tmp_path / "settings.json"
+    win = MainWindow(settings_path=settings_file)
+
+    # 1. Parse text input
+    win.import_view.paste_box.setPlainText("Queen - Radio Ga Ga\nDire Straits - Sultans of Swing")
+    win.import_view._on_start_clicked()
+
+    assert win.stack.currentIndex() == 1  # ReviewView
+    assert win.review_view.table.rowCount() == 2
+
+    # 2. Start download
+    win.review_view.btn_start.click()
+
+    assert win.stack.currentIndex() == 2  # ProgressView
+    assert win.progress_view.table.rowCount() == 2
+    assert len(win.current_jobs) == 2
+
+    import time
+    time.sleep(0.05)
+    win._force_exit()
