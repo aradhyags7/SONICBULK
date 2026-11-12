@@ -36,7 +36,15 @@ from app.sources.jamendo import JamendoProvider
 from app.sources.ytdlp_pool import YtDlpWorkerPool
 from app.sources.ytdlp_provider import YtDlpProvider
 from app.ui.bridge import AsyncWorkerThread, QtBridge
-from app.ui.theme import DARK_THEME_QSS
+from app.ui.theme import (
+    COLOR_CANVAS,
+    COLOR_SIDEBAR,
+    COLOR_SIDEBAR_BORDER,
+    DARK_THEME_QSS,
+    SIDEBAR_SETTINGS_STYLE,
+    SIDEBAR_STEP_ACTIVE_STYLE,
+    SIDEBAR_STEP_INACTIVE_STYLE,
+)
 from app.ui.views.import_view import ImportView
 from app.ui.views.progress_view import ProgressView
 from app.ui.views.results_view import ResultsView
@@ -48,7 +56,7 @@ from app.ui.widgets.tray import SystemTrayManager
 logger = logging.getLogger(__name__)
 
 
-class SidebarWidget(QWidget):
+class SidebarWidget(QFrame):
     """Left vertical sidebar with editorial branding and step indicators."""
 
     step_clicked = Signal(int)
@@ -58,7 +66,7 @@ class SidebarWidget(QWidget):
         super().__init__(parent)
         self.setObjectName("sidebarWidget")
         self.setFixedWidth(210)
-        self.setStyleSheet("background-color: #121b15; border-right: 1px solid #1c2921;")
+        self.setStyleSheet(f"background-color: {COLOR_SIDEBAR}; border-right: 1px solid {COLOR_SIDEBAR_BORDER};")
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 36, 20, 28)
@@ -90,13 +98,17 @@ class SidebarWidget(QWidget):
         # Settings Button at bottom
         self.btn_settings = QPushButton("Settings", self)
         self.btn_settings.setObjectName("sidebarSettingsBtn")
+        self.btn_settings.setStyleSheet(SIDEBAR_SETTINGS_STYLE)
         self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_settings.clicked.connect(self.settings_clicked.emit)
         layout.addWidget(self.btn_settings)
 
+        self.set_active_step(0)
+
     def _create_step_btn(self, text: str, index: int) -> QPushButton:
         btn = QPushButton(text, self)
         btn.setObjectName("sidebarStepBtn")
+        btn.setStyleSheet(SIDEBAR_STEP_INACTIVE_STYLE)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
         btn.clicked.connect(lambda: self.step_clicked.emit(index))
         return btn
@@ -104,10 +116,10 @@ class SidebarWidget(QWidget):
     def set_active_step(self, index: int) -> None:
         btns = [self.btn_step1, self.btn_step2, self.btn_step3, self.btn_step4]
         for i, b in enumerate(btns):
-            is_active = (i == index)
-            b.setProperty("active", "true" if is_active else "false")
-            b.style().unpolish(b)
-            b.style().polish(b)
+            if i == index:
+                b.setStyleSheet(SIDEBAR_STEP_ACTIVE_STYLE)
+            else:
+                b.setStyleSheet(SIDEBAR_STEP_INACTIVE_STYLE)
 
 
 class MainWindow(QMainWindow):
@@ -161,7 +173,7 @@ class MainWindow(QMainWindow):
 
         # Right Content Area (Stacked Screens)
         self.stack = QStackedWidget(self)
-        self.stack.setStyleSheet("background-color: #e6e9e1;")
+        self.stack.setStyleSheet(f"background-color: {COLOR_CANVAS};")
         main_layout.addWidget(self.stack, 1)
 
         # Build Views

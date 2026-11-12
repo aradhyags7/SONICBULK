@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Callable
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QDragEnterEvent, QDropEvent
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QPainter, QPen
 from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
@@ -18,9 +18,19 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from app.ui.theme import (
+    COLOR_CARD_BG,
+    COLOR_CARD_BORDER,
+    COLOR_TEXT_DARK,
+    COLOR_TEXT_MUTED,
+    COLOR_TEXT_UPPERCASE,
+    LIME_PILL_BUTTON_STYLE,
+    SECONDARY_BUTTON_STYLE,
+)
 
-class DropZoneWidget(QWidget):
-    """Visual drag-and-drop zone accepting PDF, DOCX, CSV, and TXT files."""
+
+class DropZoneWidget(QFrame):
+    """Visual drag-and-drop zone with dotted background grid and dashed rounded border."""
 
     def __init__(self, on_file_dropped: Callable[[Path], None], on_browse_clicked: Callable[[], None]) -> None:
         super().__init__()
@@ -28,46 +38,44 @@ class DropZoneWidget(QWidget):
         self.on_browse_clicked = on_browse_clicked
         self.setAcceptDrops(True)
         self.setMinimumHeight(240)
-        self.setStyleSheet(
-            """
-            QWidget {
-                border: 2px dashed #475a4d;
-                border-radius: 16px;
-                background-color: #dde1d6;
-            }
-            """
-        )
 
         layout = QVBoxLayout(self)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setSpacing(14)
 
         self.lbl_text = QLabel("Drag a playlist file here", self)
-        self.lbl_text.setStyleSheet("color: #111813; font-size: 22px; font-weight: 800; border: none; background: transparent;")
+        self.lbl_text.setStyleSheet(f"color: {COLOR_TEXT_DARK}; font-size: 22px; font-weight: 800; border: none; background: transparent;")
         self.lbl_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
         self.btn_browse = QPushButton("Browse file", self)
+        self.btn_browse.setStyleSheet(SECONDARY_BUTTON_STYLE)
         self.btn_browse.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_browse.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #ffffff;
-                color: #111813;
-                border: 1px solid #111813;
-                border-radius: 8px;
-                padding: 8px 24px;
-                font-weight: 600;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background-color: #f3f5ee;
-            }
-            """
-        )
         self.btn_browse.clicked.connect(self.on_browse_clicked)
 
         layout.addWidget(self.lbl_text)
         layout.addWidget(self.btn_browse, alignment=Qt.AlignmentFlag.AlignCenter)
+
+    def paintEvent(self, event) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+
+        rect = self.rect()
+        w = rect.width()
+        h = rect.height()
+
+        # Rounded rectangle background & dashed outline
+        painter.setBrush(QColor("#dde2d6"))
+        pen = QPen(QColor("#405043"), 1.5, Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+        painter.drawRoundedRect(rect.adjusted(2, 2, -2, -2), 18, 18)
+
+        # Dot matrix pattern
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(64, 80, 67, 85))
+        spacing = 16
+        for x in range(24, w - 24, spacing):
+            for y in range(24, h - 24, spacing):
+                painter.drawEllipse(x, y, 2, 2)
 
     def set_selected_filename(self, filename: str) -> None:
         self.lbl_text.setText(f"Selected: {filename}")
@@ -105,11 +113,11 @@ class ImportView(QWidget):
         header_box.setSpacing(6)
 
         title = QLabel("Drop a list.\nGet a folder.", self)
-        title.setStyleSheet("font-size: 36px; font-weight: 800; color: #111813; letter-spacing: -1px; line-height: 1.1;")
+        title.setStyleSheet(f"font-size: 36px; font-weight: 800; color: {COLOR_TEXT_DARK}; letter-spacing: -1px; line-height: 1.1;")
         header_box.addWidget(title)
 
         subtitle = QLabel("PDF, DOCX, CSV or TXT, one song per line. Everything downloads in the background.", self)
-        subtitle.setStyleSheet("color: #556052; font-size: 14px; font-weight: 500;")
+        subtitle.setStyleSheet(f"color: {COLOR_TEXT_MUTED}; font-size: 14px; font-weight: 500;")
         header_box.addWidget(subtitle)
 
         layout.addLayout(header_box)
@@ -125,18 +133,18 @@ class ImportView(QWidget):
         # Left Card: Or Paste Names
         paste_card = QFrame(self)
         paste_card.setObjectName("whiteCard")
-        paste_card.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 16px; padding: 14px;")
+        paste_card.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 16px; padding: 14px;")
         paste_layout = QVBoxLayout(paste_card)
         paste_layout.setSpacing(8)
 
         lbl_paste_title = QLabel("OR PASTE NAMES", paste_card)
-        lbl_paste_title.setStyleSheet("font-size: 11px; font-weight: 700; color: #556052; letter-spacing: 0.5px; border: none; background: transparent;")
+        lbl_paste_title.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {COLOR_TEXT_UPPERCASE}; letter-spacing: 0.5px; border: none; background: transparent;")
         paste_layout.addWidget(lbl_paste_title)
 
         self.paste_box = QPlainTextEdit(paste_card)
         self.paste_box.setPlaceholderText("Zehnaseeb\nManwa Laage\nArtist - Title also works")
-        self.paste_box.setStyleSheet("background: transparent; border: none; color: #111813; font-family: monospace; font-size: 13px; line-height: 1.4;")
-        self.paste_box.setMinimumHeight(90)
+        self.paste_box.setStyleSheet(f"background: transparent; border: none; color: {COLOR_TEXT_DARK}; font-family: monospace; font-size: 13px; line-height: 1.4;")
+        self.paste_box.setMinimumHeight(85)
         paste_layout.addWidget(self.paste_box)
 
         cards_layout.addWidget(paste_card, 1)
@@ -144,22 +152,23 @@ class ImportView(QWidget):
         # Right Card: Save To
         save_card = QFrame(self)
         save_card.setObjectName("whiteCard")
-        save_card.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 16px; padding: 14px;")
+        save_card.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 16px; padding: 14px;")
         save_layout = QVBoxLayout(save_card)
         save_layout.setSpacing(8)
 
         lbl_save_title = QLabel("SAVE TO", save_card)
-        lbl_save_title.setStyleSheet("font-size: 11px; font-weight: 700; color: #556052; letter-spacing: 0.5px; border: none; background: transparent;")
+        lbl_save_title.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {COLOR_TEXT_UPPERCASE}; letter-spacing: 0.5px; border: none; background: transparent;")
         save_layout.addWidget(lbl_save_title)
 
         self.lbl_path = QLabel(self.output_dir, save_card)
-        self.lbl_path.setStyleSheet("font-family: monospace; font-size: 13px; font-weight: 600; color: #111813; border: none; background: transparent;")
+        self.lbl_path.setStyleSheet(f"font-family: monospace; font-size: 13px; font-weight: 600; color: {COLOR_TEXT_DARK}; border: none; background: transparent;")
         self.lbl_path.setWordWrap(True)
         save_layout.addWidget(self.lbl_path)
 
         save_layout.addStretch()
 
         btn_change_dir = QPushButton("Change folder", save_card)
+        btn_change_dir.setStyleSheet(SECONDARY_BUTTON_STYLE)
         btn_change_dir.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_change_dir.clicked.connect(self._change_output_dir)
         save_layout.addWidget(btn_change_dir, alignment=Qt.AlignmentFlag.AlignLeft)
@@ -174,9 +183,8 @@ class ImportView(QWidget):
 
         self.btn_review = QPushButton("Review list →", self)
         self.btn_review.setObjectName("primaryLimeBtn")
+        self.btn_review.setStyleSheet(LIME_PILL_BUTTON_STYLE)
         self.btn_review.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_review.setMinimumHeight(44)
-        self.btn_review.setStyleSheet("font-size: 14px; padding: 10px 24px;")
         self.btn_review.clicked.connect(self._on_review_clicked)
         bottom_bar.addWidget(self.btn_review)
 

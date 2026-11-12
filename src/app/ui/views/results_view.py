@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QPushButton,
-    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -25,6 +24,18 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.models import BatchSummary, Candidate, Confidence, DownloadJob
+from app.ui.theme import (
+    COLOR_CARD_BG,
+    COLOR_CARD_BORDER,
+    COLOR_DARK_HERO,
+    COLOR_LIME,
+    COLOR_TEXT_DARK,
+    COLOR_TEXT_MUTED,
+    COLOR_TEXT_UPPERCASE,
+    LIME_BUTTON_STYLE,
+    PEACH_BADGE_STYLE,
+    SECONDARY_BUTTON_STYLE,
+)
 
 
 class CandidateSwapDialog(QDialog):
@@ -34,7 +45,7 @@ class CandidateSwapDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(f"Swap Candidate: {song_title}")
         self.resize(650, 360)
-        self.setStyleSheet("background-color: #e6e9e1; color: #111813;")
+        self.setStyleSheet(f"background-color: #e4e8dc; color: {COLOR_TEXT_DARK};")
         self.selected_candidate: Candidate | None = None
 
         layout = QVBoxLayout(self)
@@ -42,12 +53,13 @@ class CandidateSwapDialog(QDialog):
         layout.setSpacing(14)
 
         lbl = QLabel(f"Available candidates for '{song_title}':", self)
-        lbl.setStyleSheet("font-weight: 800; font-size: 16px; color: #111813;")
+        lbl.setStyleSheet(f"font-weight: 800; font-size: 16px; color: {COLOR_TEXT_DARK};")
         layout.addWidget(lbl)
 
         table_card = QFrame(self)
-        table_card.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 12px; padding: 6px;")
+        table_card.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 12px;")
         t_layout = QVBoxLayout(table_card)
+        t_layout.setContentsMargins(8, 8, 8, 8)
 
         self.table = QTableWidget(table_card)
         self.table.setColumnCount(4)
@@ -75,10 +87,11 @@ class CandidateSwapDialog(QDialog):
         btn_box.addStretch()
 
         btn_cancel = QPushButton("Cancel", self)
+        btn_cancel.setStyleSheet(SECONDARY_BUTTON_STYLE)
         btn_cancel.clicked.connect(self.reject)
 
         btn_select = QPushButton("Use this candidate", self)
-        btn_select.setObjectName("primaryLimeBtn")
+        btn_select.setStyleSheet(LIME_BUTTON_STYLE)
         btn_select.clicked.connect(lambda: self._choose(candidates))
 
         btn_box.addWidget(btn_cancel)
@@ -95,7 +108,7 @@ class CandidateSwapDialog(QDialog):
 
 
 class UnsureSongRow(QWidget):
-    """Row item in the Worth a Listen card."""
+    """Row item in the Worth a Listen card matching mockup Image 7."""
 
     def __init__(
         self,
@@ -104,8 +117,10 @@ class UnsureSongRow(QWidget):
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
+        self.setFixedHeight(38)
+
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 6, 0, 6)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
 
         matched_title = ""
@@ -114,23 +129,22 @@ class UnsureSongRow(QWidget):
             matched_title = job.match_decision.candidate.title
             score_val = job.match_decision.score
 
-        text_lbl = QLabel(f"<b>{job.song.title}</b> &nbsp;<span style='color: #64748b;'>matched “{matched_title}”</span>", self)
-        text_lbl.setStyleSheet("font-size: 13px; color: #111813; border: none; background: transparent;")
+        text_lbl = QLabel(f"<b>{job.song.title}</b> &nbsp;<span style='color: {COLOR_TEXT_MUTED};'>matched “{matched_title}”</span>", self)
+        text_lbl.setStyleSheet(f"font-size: 13px; color: {COLOR_TEXT_DARK}; border: none; background: transparent; padding: 0px;")
         layout.addWidget(text_lbl, 1)
 
         badge = QLabel(f"Low match · {score_val:.2f}", self)
-        badge.setStyleSheet(
-            "background-color: #fce7d8; color: #b45309; border-radius: 10px; font-weight: 600; font-size: 11px; padding: 4px 10px; border: none;"
-        )
+        badge.setStyleSheet(PEACH_BADGE_STYLE)
         layout.addWidget(badge)
 
-        if job.output_path and Path(job.output_path).is_file():
-            btn_play = QPushButton("Play", self)
-            btn_play.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn_play.clicked.connect(lambda: self._play_file(job.output_path))
-            layout.addWidget(btn_play)
+        btn_play = QPushButton("Play", self)
+        btn_play.setStyleSheet(SECONDARY_BUTTON_STYLE)
+        btn_play.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_play.clicked.connect(lambda: self._play_file(job.output_path))
+        layout.addWidget(btn_play)
 
         btn_swap = QPushButton("Swap", self)
+        btn_swap.setStyleSheet(SECONDARY_BUTTON_STYLE)
         btn_swap.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_swap.clicked.connect(lambda: on_swap_clicked(job))
         layout.addWidget(btn_swap)
@@ -175,21 +189,21 @@ class ResultsView(QWidget):
         title_col = QVBoxLayout()
         title_col.setSpacing(4)
         self.lbl_title = QLabel("Done. 0 songs in your folder.", self)
-        self.lbl_title.setStyleSheet("font-size: 32px; font-weight: 800; color: #111813; letter-spacing: -0.5px;")
+        self.lbl_title.setStyleSheet(f"font-size: 32px; font-weight: 800; color: {COLOR_TEXT_DARK}; letter-spacing: -0.5px;")
         self.lbl_subtitle = QLabel(f"0s · {self.output_dir}", self)
-        self.lbl_subtitle.setStyleSheet("color: #556052; font-size: 14px; font-weight: 500;")
+        self.lbl_subtitle.setStyleSheet(f"color: {COLOR_TEXT_MUTED}; font-size: 14px; font-weight: 500;")
         title_col.addWidget(self.lbl_title)
         title_col.addWidget(self.lbl_subtitle)
         header_row.addLayout(title_col)
 
         header_row.addStretch()
 
-        btn_open = QPushButton("Open folder", self)
-        btn_open.setObjectName("primaryLimeBtn")
-        btn_open.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn_open.setMinimumHeight(42)
-        btn_open.clicked.connect(self._open_output_folder)
-        header_row.addWidget(btn_open)
+        self.btn_open = QPushButton("Open folder", self)
+        self.btn_open.setObjectName("primaryLimeBtn")
+        self.btn_open.setStyleSheet(LIME_BUTTON_STYLE)
+        self.btn_open.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_open.clicked.connect(self._open_output_folder)
+        header_row.addWidget(self.btn_open)
 
         layout.addLayout(header_row)
 
@@ -200,13 +214,14 @@ class ResultsView(QWidget):
         # Card 1: Downloaded (Dark Card)
         card_down = QFrame(self)
         card_down.setObjectName("darkHeroCard")
-        card_down.setStyleSheet("background-color: #141f17; border-radius: 16px; padding: 20px; border: none;")
+        card_down.setStyleSheet(f"background-color: {COLOR_DARK_HERO}; border-radius: 16px; border: none;")
         cd_layout = QVBoxLayout(card_down)
+        cd_layout.setContentsMargins(20, 20, 20, 20)
         cd_layout.setSpacing(6)
         self.lbl_num_downloaded = QLabel("0", card_down)
-        self.lbl_num_downloaded.setStyleSheet("color: #c8f53c; font-size: 44px; font-weight: 800; border: none; background: transparent;")
+        self.lbl_num_downloaded.setStyleSheet(f"color: {COLOR_LIME}; font-size: 46px; font-weight: 800; border: none; background: transparent; padding: 0px;")
         lbl_cd_name = QLabel("Downloaded", card_down)
-        lbl_cd_name.setStyleSheet("color: #c8f53c; font-size: 13px; font-weight: 700; border: none; background: transparent;")
+        lbl_cd_name.setStyleSheet(f"color: {COLOR_LIME}; font-size: 13px; font-weight: 700; border: none; background: transparent; padding: 0px;")
         cd_layout.addWidget(self.lbl_num_downloaded)
         cd_layout.addWidget(lbl_cd_name)
         cards_row.addWidget(card_down, 1)
@@ -214,13 +229,14 @@ class ResultsView(QWidget):
         # Card 2: Skipped (White Card)
         card_skip = QFrame(self)
         card_skip.setObjectName("whiteCard")
-        card_skip.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 16px; padding: 20px;")
+        card_skip.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 16px;")
         cs_layout = QVBoxLayout(card_skip)
+        cs_layout.setContentsMargins(20, 20, 20, 20)
         cs_layout.setSpacing(6)
         self.lbl_num_skipped = QLabel("0", card_skip)
-        self.lbl_num_skipped.setStyleSheet("color: #111813; font-size: 44px; font-weight: 800; border: none; background: transparent;")
+        self.lbl_num_skipped.setStyleSheet(f"color: {COLOR_TEXT_DARK}; font-size: 46px; font-weight: 800; border: none; background: transparent; padding: 0px;")
         lbl_cs_name = QLabel("Skipped", card_skip)
-        lbl_cs_name.setStyleSheet("color: #64748b; font-size: 13px; font-weight: 600; border: none; background: transparent;")
+        lbl_cs_name.setStyleSheet(f"color: {COLOR_TEXT_UPPERCASE}; font-size: 13px; font-weight: 600; border: none; background: transparent; padding: 0px;")
         cs_layout.addWidget(self.lbl_num_skipped)
         cs_layout.addWidget(lbl_cs_name)
         cards_row.addWidget(card_skip, 1)
@@ -228,13 +244,14 @@ class ResultsView(QWidget):
         # Card 3: Not found (White Card)
         card_notfound = QFrame(self)
         card_notfound.setObjectName("whiteCard")
-        card_notfound.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 16px; padding: 20px;")
+        card_notfound.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 16px;")
         cnf_layout = QVBoxLayout(card_notfound)
+        cnf_layout.setContentsMargins(20, 20, 20, 20)
         cnf_layout.setSpacing(6)
         self.lbl_num_notfound = QLabel("0", card_notfound)
-        self.lbl_num_notfound.setStyleSheet("color: #111813; font-size: 44px; font-weight: 800; border: none; background: transparent;")
+        self.lbl_num_notfound.setStyleSheet(f"color: {COLOR_TEXT_DARK}; font-size: 46px; font-weight: 800; border: none; background: transparent; padding: 0px;")
         lbl_cnf_name = QLabel("Not found", card_notfound)
-        lbl_cnf_name.setStyleSheet("color: #64748b; font-size: 13px; font-weight: 600; border: none; background: transparent;")
+        lbl_cnf_name.setStyleSheet(f"color: {COLOR_TEXT_UPPERCASE}; font-size: 13px; font-weight: 600; border: none; background: transparent; padding: 0px;")
         cnf_layout.addWidget(self.lbl_num_notfound)
         cnf_layout.addWidget(lbl_cnf_name)
         cards_row.addWidget(card_notfound, 1)
@@ -242,13 +259,14 @@ class ResultsView(QWidget):
         # Card 4: Failed (White Card)
         card_failed = QFrame(self)
         card_failed.setObjectName("whiteCard")
-        card_failed.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 16px; padding: 20px;")
+        card_failed.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 16px;")
         cf_layout = QVBoxLayout(card_failed)
+        cf_layout.setContentsMargins(20, 20, 20, 20)
         cf_layout.setSpacing(6)
         self.lbl_num_failed = QLabel("0", card_failed)
-        self.lbl_num_failed.setStyleSheet("color: #111813; font-size: 44px; font-weight: 800; border: none; background: transparent;")
+        self.lbl_num_failed.setStyleSheet(f"color: {COLOR_TEXT_DARK}; font-size: 46px; font-weight: 800; border: none; background: transparent; padding: 0px;")
         lbl_cf_name = QLabel("Failed", card_failed)
-        lbl_cf_name.setStyleSheet("color: #64748b; font-size: 13px; font-weight: 600; border: none; background: transparent;")
+        lbl_cf_name.setStyleSheet(f"color: {COLOR_TEXT_UPPERCASE}; font-size: 13px; font-weight: 600; border: none; background: transparent; padding: 0px;")
         cf_layout.addWidget(self.lbl_num_failed)
         cf_layout.addWidget(lbl_cf_name)
         cards_row.addWidget(card_failed, 1)
@@ -258,16 +276,17 @@ class ResultsView(QWidget):
         # Worth A Listen Card Container
         self.unsure_card = QFrame(self)
         self.unsure_card.setObjectName("whiteCard")
-        self.unsure_card.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 16px; padding: 20px;")
+        self.unsure_card.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 16px;")
         unsure_layout = QVBoxLayout(self.unsure_card)
+        unsure_layout.setContentsMargins(20, 20, 20, 20)
         unsure_layout.setSpacing(12)
 
         self.lbl_unsure_header = QLabel("WORTH A LISTEN · SONGS THE APP WAS UNSURE ABOUT", self.unsure_card)
-        self.lbl_unsure_header.setStyleSheet("font-size: 11px; font-weight: 700; color: #64748b; letter-spacing: 0.5px; border: none; background: transparent;")
+        self.lbl_unsure_header.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {COLOR_TEXT_UPPERCASE}; letter-spacing: 0.5px; border: none; background: transparent; padding: 0px;")
         unsure_layout.addWidget(self.lbl_unsure_header)
 
         self.unsure_rows_container = QVBoxLayout()
-        self.unsure_rows_container.setSpacing(6)
+        self.unsure_rows_container.setSpacing(8)
         unsure_layout.addLayout(self.unsure_rows_container)
         unsure_layout.addStretch()
 
@@ -278,6 +297,7 @@ class ResultsView(QWidget):
         bottom_bar.setContentsMargins(0, 8, 0, 0)
 
         self.btn_new = QPushButton("New batch", self)
+        self.btn_new.setStyleSheet(SECONDARY_BUTTON_STYLE)
         self.btn_new.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_new.clicked.connect(self.on_new_import)
         bottom_bar.addWidget(self.btn_new)
@@ -285,16 +305,22 @@ class ResultsView(QWidget):
         bottom_bar.addStretch()
 
         self.btn_export = QPushButton("Export report CSV", self)
+        self.btn_export.setStyleSheet(SECONDARY_BUTTON_STYLE)
         self.btn_export.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_export.clicked.connect(self._export_csv)
         bottom_bar.addWidget(self.btn_export)
 
         self.btn_retry = QPushButton("Retry failed (0)", self)
+        self.btn_retry.setStyleSheet(SECONDARY_BUTTON_STYLE)
         self.btn_retry.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_retry.clicked.connect(self._retry_failed_clicked)
         bottom_bar.addWidget(self.btn_retry)
 
         layout.addLayout(bottom_bar)
+
+    def populate(self, summary: BatchSummary, jobs: list[DownloadJob]) -> None:
+        """Alias for compatibility with tests."""
+        self.populate_results(summary, jobs)
 
     def populate_results(self, summary: BatchSummary, jobs: list[DownloadJob]) -> None:
         """Populate result metrics and low-confidence review rows."""
@@ -315,7 +341,7 @@ class ResultsView(QWidget):
         self.lbl_title.setText(f"Done. {summary.downloaded} songs in your folder.")
         mins = int(summary.duration_seconds // 60)
         secs = int(summary.duration_seconds % 60)
-        time_str = f"{mins}m {secs}s" if mins > 0 else f"{secs}s"
+        time_str = f"{mins}m {secs:02d}s" if mins > 0 else f"{secs}s"
         self.lbl_subtitle.setText(f"{time_str} · {self.output_dir}")
 
         self.lbl_num_downloaded.setText(str(summary.downloaded))
@@ -341,7 +367,6 @@ class ResultsView(QWidget):
         ]
 
         if not unsure_jobs:
-            # If all were high confidence, show recently downloaded
             unsure_jobs = [j for j in jobs if j.status.value == "done"][:6]
             self.lbl_unsure_header.setText(f"COMPLETED TRACKS · {len(unsure_jobs)} SONGS")
         else:

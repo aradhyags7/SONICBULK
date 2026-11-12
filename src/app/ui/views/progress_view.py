@@ -21,6 +21,16 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.models import DownloadJob
+from app.ui.theme import (
+    COLOR_CARD_BG,
+    COLOR_CARD_BORDER,
+    COLOR_DARK_HERO,
+    COLOR_LIME,
+    COLOR_TEXT_DARK,
+    COLOR_TEXT_MUTED,
+    COLOR_TEXT_UPPERCASE,
+    SECONDARY_BUTTON_STYLE,
+)
 
 
 class AudioVisualizerWidget(QWidget):
@@ -31,14 +41,14 @@ class AudioVisualizerWidget(QWidget):
         self.setFixedHeight(38)
         self.progress_fraction = 0.0  # 0.0 to 1.0
 
-        # Pre-calculated pleasant waveform heights (60 bars)
+        # Pre-calculated pleasant waveform heights (58 bars)
         self._height_factors = [
             0.3, 0.4, 0.7, 0.9, 0.6, 0.4, 0.5, 0.8, 1.0, 0.7,
             0.5, 0.3, 0.6, 0.85, 0.75, 0.4, 0.65, 0.9, 0.5, 0.35,
             0.45, 0.8, 0.95, 0.6, 0.4, 0.55, 0.75, 0.85, 0.65, 0.4,
             0.5, 0.7, 0.9, 1.0, 0.8, 0.45, 0.6, 0.75, 0.85, 0.5,
             0.35, 0.65, 0.8, 0.95, 0.7, 0.4, 0.5, 0.85, 0.6, 0.45,
-            0.35, 0.55, 0.75, 0.9, 0.65, 0.4, 0.5, 0.7, 0.55, 0.3
+            0.35, 0.55, 0.75, 0.9, 0.65, 0.4, 0.5, 0.35,
         ]
 
     def set_progress(self, fraction: float) -> None:
@@ -52,12 +62,12 @@ class AudioVisualizerWidget(QWidget):
         width = self.width()
         height = self.height()
         bar_count = len(self._height_factors)
-        bar_width = max(2.5, (width - (bar_count - 1) * 3) / bar_count)
-        spacing = 3.0
+        bar_width = max(2.5, (width - (bar_count - 1) * 4) / bar_count)
+        spacing = 4.0
 
         filled_count = int(self.progress_fraction * bar_count)
 
-        color_active = QColor("#c8f53c")  # Vibrant lime
+        color_active = QColor(COLOR_LIME)  # Vibrant lime
         color_inactive = QColor("#223326")  # Dark pine muted
 
         for i, factor in enumerate(self._height_factors):
@@ -76,17 +86,19 @@ class InProgressRowWidget(QWidget):
 
     def __init__(self, title: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setFixedHeight(34)
+
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 4, 0, 4)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
 
         self.lbl_title = QLabel(title, self)
-        self.lbl_title.setStyleSheet("font-weight: 700; color: #111813; font-size: 13px; border: none; background: transparent;")
+        self.lbl_title.setStyleSheet(f"font-weight: 700; color: {COLOR_TEXT_DARK}; font-size: 13px; border: none; background: transparent; padding: 0px;")
         self.lbl_title.setMinimumWidth(160)
         layout.addWidget(self.lbl_title, 1)
 
         self.lbl_status = QLabel("Searching", self)
-        self.lbl_status.setStyleSheet("color: #64748b; font-size: 12px; border: none; background: transparent;")
+        self.lbl_status.setStyleSheet(f"color: {COLOR_TEXT_MUTED}; font-size: 12px; border: none; background: transparent; padding: 0px;")
         self.lbl_status.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.lbl_status.setMinimumWidth(110)
         layout.addWidget(self.lbl_status)
@@ -95,19 +107,19 @@ class InProgressRowWidget(QWidget):
         self.pbar.setRange(0, 100)
         self.pbar.setValue(5)
         self.pbar.setTextVisible(False)
-        self.pbar.setFixedHeight(6)
-        self.pbar.setFixedWidth(70)
+        self.pbar.setFixedHeight(5)
+        self.pbar.setFixedWidth(65)
         self.pbar.setStyleSheet(
-            """
-            QProgressBar {
-                background-color: #e2e8f0;
-                border-radius: 3px;
+            f"""
+            QProgressBar {{
+                background-color: #e5ebe2;
+                border-radius: 2px;
                 border: none;
-            }
-            QProgressBar::chunk {
-                background-color: #111813;
-                border-radius: 3px;
-            }
+            }}
+            QProgressBar::chunk {{
+                background-color: {COLOR_TEXT_DARK};
+                border-radius: 2px;
+            }}
             """
         )
         layout.addWidget(self.pbar)
@@ -119,7 +131,7 @@ class InProgressRowWidget(QWidget):
         elif status == "tagging":
             self.lbl_status.setText("Tagging")
             self.pbar.setValue(90)
-        elif status == "matching" or status == "resolving":
+        elif status in ("matching", "resolving"):
             self.lbl_status.setText("Matching")
             self.pbar.setValue(25)
         elif status == "searching":
@@ -135,16 +147,18 @@ class JustFinishedRowWidget(QWidget):
 
     def __init__(self, title: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self.setFixedHeight(34)
+
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 6, 0, 6)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
 
         lbl_title = QLabel(title, self)
-        lbl_title.setStyleSheet("font-weight: 500; color: #111813; font-size: 13px; border: none; background: transparent;")
+        lbl_title.setStyleSheet(f"font-weight: 500; color: {COLOR_TEXT_DARK}; font-size: 13px; border: none; background: transparent; padding: 0px;")
         layout.addWidget(lbl_title, 1)
 
         lbl_check = QLabel("✓", self)
-        lbl_check.setStyleSheet("color: #15803d; font-weight: 800; font-size: 15px; border: none; background: transparent;")
+        lbl_check.setStyleSheet("color: #1b7340; font-weight: 800; font-size: 15px; border: none; background: transparent; padding: 0px;")
         layout.addWidget(lbl_check)
 
 
@@ -191,17 +205,19 @@ class ProgressView(QWidget):
         # Top Bar: Title & Pause / Cancel buttons
         top_bar = QHBoxLayout()
         title = QLabel("Downloading", self)
-        title.setStyleSheet("font-size: 32px; font-weight: 800; color: #111813; letter-spacing: -0.5px;")
+        title.setStyleSheet(f"font-size: 32px; font-weight: 800; color: {COLOR_TEXT_DARK}; letter-spacing: -0.5px;")
         top_bar.addWidget(title)
 
         top_bar.addStretch()
 
         self.btn_pause = QPushButton("Pause", self)
+        self.btn_pause.setStyleSheet(SECONDARY_BUTTON_STYLE)
         self.btn_pause.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_pause.clicked.connect(self._toggle_pause)
         top_bar.addWidget(self.btn_pause)
 
         self.btn_cancel = QPushButton("Cancel", self)
+        self.btn_cancel.setStyleSheet(SECONDARY_BUTTON_STYLE)
         self.btn_cancel.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_cancel.clicked.connect(self.on_cancel)
         top_bar.addWidget(self.btn_cancel)
@@ -212,9 +228,10 @@ class ProgressView(QWidget):
         hero_card = QFrame(self)
         hero_card.setObjectName("darkHeroCard")
         hero_card.setStyleSheet(
-            "background-color: #141f17; border-radius: 16px; padding: 24px; border: none;"
+            f"background-color: {COLOR_DARK_HERO}; border-radius: 20px; border: none;"
         )
         hero_layout = QVBoxLayout(hero_card)
+        hero_layout.setContentsMargins(24, 24, 24, 24)
         hero_layout.setSpacing(20)
 
         stats_row = QHBoxLayout()
@@ -227,13 +244,13 @@ class ProgressView(QWidget):
 
         self.lbl_downloaded_count = QLabel("0", hero_card)
         self.lbl_downloaded_count.setStyleSheet(
-            "color: #c8f53c; font-size: 52px; font-weight: 800; line-height: 1; border: none; background: transparent;"
+            f"color: {COLOR_LIME}; font-size: 58px; font-weight: 800; line-height: 1; border: none; background: transparent; padding: 0px;"
         )
         count_box.addWidget(self.lbl_downloaded_count)
 
         self.lbl_total_count = QLabel("of 0 songs", hero_card)
         self.lbl_total_count.setStyleSheet(
-            "color: #ffffff; font-size: 16px; font-weight: 500; border: none; background: transparent; padding-top: 14px;"
+            "color: #ffffff; font-size: 16px; font-weight: 500; border: none; background: transparent; padding: 0px; padding-top: 18px;"
         )
         count_box.addWidget(self.lbl_total_count)
         stats_row.addLayout(count_box)
@@ -248,9 +265,9 @@ class ProgressView(QWidget):
         col_speed = QVBoxLayout()
         col_speed.setSpacing(2)
         lbl_s_hdr = QLabel("SPEED", hero_card)
-        lbl_s_hdr.setStyleSheet("color: #8e9f94; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; border: none; background: transparent;")
+        lbl_s_hdr.setStyleSheet("color: #7d9182; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; border: none; background: transparent; padding: 0px;")
         self.lbl_speed_val = QLabel("0.0 MB/s", hero_card)
-        self.lbl_speed_val.setStyleSheet("color: #ffffff; font-size: 17px; font-weight: 700; border: none; background: transparent;")
+        self.lbl_speed_val.setStyleSheet("color: #ffffff; font-size: 17px; font-weight: 700; border: none; background: transparent; padding: 0px;")
         col_speed.addWidget(lbl_s_hdr)
         col_speed.addWidget(self.lbl_speed_val)
         metrics_box.addLayout(col_speed)
@@ -259,9 +276,9 @@ class ProgressView(QWidget):
         col_left = QVBoxLayout()
         col_left.setSpacing(2)
         lbl_l_hdr = QLabel("TIME LEFT", hero_card)
-        lbl_l_hdr.setStyleSheet("color: #8e9f94; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; border: none; background: transparent;")
+        lbl_l_hdr.setStyleSheet("color: #7d9182; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; border: none; background: transparent; padding: 0px;")
         self.lbl_eta_val = QLabel("--:--", hero_card)
-        self.lbl_eta_val.setStyleSheet("color: #ffffff; font-size: 17px; font-weight: 700; border: none; background: transparent;")
+        self.lbl_eta_val.setStyleSheet("color: #ffffff; font-size: 17px; font-weight: 700; border: none; background: transparent; padding: 0px;")
         col_left.addWidget(lbl_l_hdr)
         col_left.addWidget(self.lbl_eta_val)
         metrics_box.addLayout(col_left)
@@ -270,9 +287,9 @@ class ProgressView(QWidget):
         col_el = QVBoxLayout()
         col_el.setSpacing(2)
         lbl_e_hdr = QLabel("ELAPSED", hero_card)
-        lbl_e_hdr.setStyleSheet("color: #8e9f94; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; border: none; background: transparent;")
+        lbl_e_hdr.setStyleSheet("color: #7d9182; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; border: none; background: transparent; padding: 0px;")
         self.lbl_elapsed_val = QLabel("0s", hero_card)
-        self.lbl_elapsed_val.setStyleSheet("color: #ffffff; font-size: 17px; font-weight: 700; border: none; background: transparent;")
+        self.lbl_elapsed_val.setStyleSheet("color: #ffffff; font-size: 17px; font-weight: 700; border: none; background: transparent; padding: 0px;")
         col_el.addWidget(lbl_e_hdr)
         col_el.addWidget(self.lbl_elapsed_val)
         metrics_box.addLayout(col_el)
@@ -293,16 +310,17 @@ class ProgressView(QWidget):
         # Left Card: IN PROGRESS
         self.in_progress_card = QFrame(self)
         self.in_progress_card.setObjectName("whiteCard")
-        self.in_progress_card.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 16px; padding: 18px;")
+        self.in_progress_card.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 16px;")
         self.in_progress_layout = QVBoxLayout(self.in_progress_card)
-        self.in_progress_layout.setSpacing(10)
+        self.in_progress_layout.setContentsMargins(20, 18, 20, 18)
+        self.in_progress_layout.setSpacing(8)
 
         lbl_inp_hdr = QLabel("IN PROGRESS", self.in_progress_card)
-        lbl_inp_hdr.setStyleSheet("font-size: 11px; font-weight: 700; color: #64748b; letter-spacing: 0.5px; border: none; background: transparent;")
+        lbl_inp_hdr.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {COLOR_TEXT_UPPERCASE}; letter-spacing: 0.5px; border: none; background: transparent; padding: 0px;")
         self.in_progress_layout.addWidget(lbl_inp_hdr)
 
         self.in_progress_container = QVBoxLayout()
-        self.in_progress_container.setSpacing(6)
+        self.in_progress_container.setSpacing(4)
         self.in_progress_layout.addLayout(self.in_progress_container)
         self.in_progress_layout.addStretch()
 
@@ -311,16 +329,17 @@ class ProgressView(QWidget):
         # Right Card: JUST FINISHED
         self.finished_card = QFrame(self)
         self.finished_card.setObjectName("whiteCard")
-        self.finished_card.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 16px; padding: 18px;")
+        self.finished_card.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 16px;")
         self.finished_layout = QVBoxLayout(self.finished_card)
-        self.finished_layout.setSpacing(10)
+        self.finished_layout.setContentsMargins(20, 18, 20, 18)
+        self.finished_layout.setSpacing(8)
 
         lbl_fin_hdr = QLabel("JUST FINISHED", self.finished_card)
-        lbl_fin_hdr.setStyleSheet("font-size: 11px; font-weight: 700; color: #64748b; letter-spacing: 0.5px; border: none; background: transparent;")
+        lbl_fin_hdr.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {COLOR_TEXT_UPPERCASE}; letter-spacing: 0.5px; border: none; background: transparent; padding: 0px;")
         self.finished_layout.addWidget(lbl_fin_hdr)
 
         self.finished_container = QVBoxLayout()
-        self.finished_container.setSpacing(6)
+        self.finished_container.setSpacing(4)
         self.finished_layout.addLayout(self.finished_container)
         self.finished_layout.addStretch()
 
@@ -370,7 +389,6 @@ class ProgressView(QWidget):
 
     def update_job_status(self, job_id: str, status: str, error: str, output_path: str) -> None:
         """Handle individual song lifecycle status changes."""
-        # Update compatibility table
         row = self._job_row_map.get(job_id)
         if row is not None:
             st_item = self.table.item(row, 2)
@@ -390,8 +408,7 @@ class ProgressView(QWidget):
         # If job is active, show in IN PROGRESS list
         if status in ("searching", "matched", "resolving", "downloading", "tagging"):
             if job_id not in self._in_progress_widgets:
-                # Keep max 6 items
-                if len(self._in_progress_widgets) >= 6:
+                if len(self._in_progress_widgets) >= 5:
                     first_k = next(iter(self._in_progress_widgets))
                     w_old = self._in_progress_widgets.pop(first_k)
                     w_old.deleteLater()
@@ -408,8 +425,7 @@ class ProgressView(QWidget):
 
             if job_id not in self._finished_job_ids:
                 self._finished_job_ids.add(job_id)
-                # Keep up to 6 finished items
-                if self.finished_container.count() >= 6:
+                if self.finished_container.count() >= 5:
                     first_item = self.finished_container.takeAt(0)
                     if first_item.widget():
                         first_item.widget().deleteLater()
@@ -468,7 +484,7 @@ class ProgressView(QWidget):
             elapsed = int(time.monotonic() - self._start_time)
             mins = elapsed // 60
             secs = elapsed % 60
-            self.lbl_elapsed_val.setText(f"{mins}m {secs}s" if mins > 0 else f"{secs}s")
+            self.lbl_elapsed_val.setText(f"{mins}m {secs:02d}s" if mins > 0 else f"{secs}s")
 
             # ETA
             remaining = total - (downloaded + skipped + not_found + failed)

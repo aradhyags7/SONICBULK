@@ -23,6 +23,14 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.config import AppSettings
+from app.ui.theme import (
+    COLOR_CARD_BG,
+    COLOR_CARD_BORDER,
+    COLOR_TEXT_DARK,
+    COLOR_TEXT_UPPERCASE,
+    LIME_PILL_BUTTON_STYLE,
+    SECONDARY_BUTTON_STYLE,
+)
 
 
 class SettingsView(QWidget):
@@ -46,11 +54,13 @@ class SettingsView(QWidget):
         # Header Title
         top_bar = QHBoxLayout()
         title = QLabel("Settings & Preferences", self)
-        title.setStyleSheet("font-size: 32px; font-weight: 800; color: #111813; letter-spacing: -0.5px;")
+        title.setStyleSheet(f"font-size: 32px; font-weight: 800; color: {COLOR_TEXT_DARK}; letter-spacing: -0.5px;")
         top_bar.addWidget(title)
         top_bar.addStretch()
 
         btn_back = QPushButton("← Back", self)
+        btn_back.setStyleSheet(SECONDARY_BUTTON_STYLE)
+        btn_back.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_back.clicked.connect(self.on_back)
         top_bar.addWidget(btn_back)
         main_layout.addLayout(top_bar)
@@ -69,17 +79,19 @@ class SettingsView(QWidget):
         # 1. Output & Organization Card
         card_output = QFrame(scroll_content)
         card_output.setObjectName("whiteCard")
-        card_output.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 16px; padding: 20px;")
+        card_output.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 16px;")
         form_output = QFormLayout(card_output)
+        form_output.setContentsMargins(20, 20, 20, 20)
         form_output.setSpacing(12)
 
         lbl_hdr1 = QLabel("OUTPUT & FOLDER ORGANIZATION", card_output)
-        lbl_hdr1.setStyleSheet("font-size: 11px; font-weight: 700; color: #64748b; letter-spacing: 0.5px; border: none; background: transparent;")
+        lbl_hdr1.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {COLOR_TEXT_UPPERCASE}; letter-spacing: 0.5px; border: none; background: transparent;")
         form_output.addRow(lbl_hdr1)
 
         out_layout = QHBoxLayout()
         self.input_output_dir = QLineEdit(settings.output_dir, card_output)
         btn_browse = QPushButton("Browse...", card_output)
+        btn_browse.setStyleSheet(SECONDARY_BUTTON_STYLE)
         btn_browse.clicked.connect(self._browse_dir)
         out_layout.addWidget(self.input_output_dir, 1)
         out_layout.addWidget(btn_browse)
@@ -103,12 +115,13 @@ class SettingsView(QWidget):
         # 2. Concurrency & Performance Card
         card_perf = QFrame(scroll_content)
         card_perf.setObjectName("whiteCard")
-        card_perf.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 16px; padding: 20px;")
+        card_perf.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 16px;")
         form_perf = QFormLayout(card_perf)
+        form_perf.setContentsMargins(20, 20, 20, 20)
         form_perf.setSpacing(12)
 
         lbl_hdr2 = QLabel("PIPELINE CONCURRENCY (STAGES)", card_perf)
-        lbl_hdr2.setStyleSheet("font-size: 11px; font-weight: 700; color: #64748b; letter-spacing: 0.5px; border: none; background: transparent;")
+        lbl_hdr2.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {COLOR_TEXT_UPPERCASE}; letter-spacing: 0.5px; border: none; background: transparent;")
         form_perf.addRow(lbl_hdr2)
 
         self.spin_download = QSpinBox(card_perf)
@@ -132,12 +145,13 @@ class SettingsView(QWidget):
         # 3. Provider & Matching Card
         card_match = QFrame(scroll_content)
         card_match.setObjectName("whiteCard")
-        card_match.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 16px; padding: 20px;")
+        card_match.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 16px;")
         form_match = QFormLayout(card_match)
+        form_match.setContentsMargins(20, 20, 20, 20)
         form_match.setSpacing(12)
 
         lbl_hdr3 = QLabel("MATCH THRESHOLDS & CACHE", card_match)
-        lbl_hdr3.setStyleSheet("font-size: 11px; font-weight: 700; color: #64748b; letter-spacing: 0.5px; border: none; background: transparent;")
+        lbl_hdr3.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {COLOR_TEXT_UPPERCASE}; letter-spacing: 0.5px; border: none; background: transparent;")
         form_match.addRow(lbl_hdr3)
 
         self.spin_th_high = QDoubleSpinBox(card_match)
@@ -167,7 +181,8 @@ class SettingsView(QWidget):
 
         self.btn_save = QPushButton("Save Settings", self)
         self.btn_save.setObjectName("primaryLimeBtn")
-        self.btn_save.setMinimumHeight(44)
+        self.btn_save.setStyleSheet(LIME_PILL_BUTTON_STYLE)
+        self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_save.clicked.connect(self._on_save)
         bottom_bar.addWidget(self.btn_save)
 

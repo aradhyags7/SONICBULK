@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Callable
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
@@ -19,6 +20,17 @@ from PySide6.QtWidgets import (
 )
 
 from app.core.models import SongEntry
+from app.ui.theme import (
+    COLOR_CARD_BG,
+    COLOR_CARD_BORDER,
+    COLOR_NOTICE_BG,
+    COLOR_NOTICE_BORDER,
+    COLOR_NOTICE_TEXT,
+    COLOR_TEXT_DARK,
+    LIME_PILL_BUTTON_STYLE,
+    PEACH_BADGE_STYLE,
+    SECONDARY_BUTTON_STYLE,
+)
 
 
 class ReviewView(QWidget):
@@ -41,19 +53,18 @@ class ReviewView(QWidget):
         # Top Header Bar
         top_bar = QHBoxLayout()
         self.title_label = QLabel("0 songs found", self)
-        self.title_label.setStyleSheet("font-size: 32px; font-weight: 800; color: #111813; letter-spacing: -0.5px;")
+        self.title_label.setStyleSheet(f"font-size: 32px; font-weight: 800; color: {COLOR_TEXT_DARK}; letter-spacing: -0.5px;")
         top_bar.addWidget(self.title_label)
 
         top_bar.addStretch()
 
         self.duplicate_badge = QLabel("0 duplicates", self)
-        self.duplicate_badge.setStyleSheet(
-            "background-color: #fce7d8; color: #b45309; padding: 5px 12px; border-radius: 12px; font-weight: 600; font-size: 12px;"
-        )
+        self.duplicate_badge.setStyleSheet(PEACH_BADGE_STYLE)
         self.duplicate_badge.setVisible(False)
         top_bar.addWidget(self.duplicate_badge)
 
         self.btn_remove_dups = QPushButton("Remove duplicates", self)
+        self.btn_remove_dups.setStyleSheet(SECONDARY_BUTTON_STYLE)
         self.btn_remove_dups.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_remove_dups.clicked.connect(self._remove_duplicates)
         self.btn_remove_dups.setVisible(False)
@@ -61,38 +72,44 @@ class ReviewView(QWidget):
 
         layout.addLayout(top_bar)
 
-        # Informational Banner
+        # Informational Notice Banner
         self.banner = QFrame(self)
         self.banner.setStyleSheet(
-            "background-color: #edf7a5; border-radius: 8px; padding: 10px 14px; border: none;"
+            f"background-color: {COLOR_NOTICE_BG}; border: 1px solid {COLOR_NOTICE_BORDER}; border-radius: 10px; padding: 10px 14px;"
         )
         banner_layout = QHBoxLayout(self.banner)
-        banner_layout.setContentsMargins(10, 8, 10, 8)
+        banner_layout.setContentsMargins(12, 8, 12, 8)
         self.lbl_banner_text = QLabel(
             "No artists detected. Add one where you can and matches get more accurate.", self.banner
         )
-        self.lbl_banner_text.setStyleSheet("color: #273815; font-size: 13px; font-weight: 500; border: none; background: transparent;")
+        self.lbl_banner_text.setStyleSheet(f"color: {COLOR_NOTICE_TEXT}; font-size: 13px; font-weight: 500; border: none; background: transparent;")
         banner_layout.addWidget(self.lbl_banner_text)
         layout.addWidget(self.banner)
 
         # White Card Container for Table
         table_card = QFrame(self)
         table_card.setObjectName("whiteCard")
-        table_card.setStyleSheet("background-color: #ffffff; border: 1px solid #d8ddcf; border-radius: 16px; padding: 8px;")
+        table_card.setStyleSheet(f"background-color: {COLOR_CARD_BG}; border: 1px solid {COLOR_CARD_BORDER}; border-radius: 16px; padding: 6px;")
         t_layout = QVBoxLayout(table_card)
         t_layout.setContentsMargins(4, 4, 4, 4)
 
         self.table = QTableWidget(table_card)
         self.table.setColumnCount(5)
         self.table.setHorizontalHeaderLabels(["#", "TITLE", "ARTIST", "SEARCH QUERY", "STATUS"])
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(0, 45)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Interactive)
+        self.table.setColumnWidth(1, 210)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+        self.table.setColumnWidth(2, 180)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Fixed)
+        self.table.setColumnWidth(4, 90)
+
+        self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(38)
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setShowGrid(False)
-        self.table.verticalHeader().setVisible(False)
         self.table.cellChanged.connect(self._on_cell_changed)
         t_layout.addWidget(self.table)
 
@@ -103,8 +120,8 @@ class ReviewView(QWidget):
         bottom_bar.setContentsMargins(0, 8, 0, 0)
 
         self.btn_back = QPushButton("← Back", self)
+        self.btn_back.setStyleSheet(SECONDARY_BUTTON_STYLE)
         self.btn_back.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_back.setMinimumHeight(42)
         self.btn_back.clicked.connect(self.on_back)
         bottom_bar.addWidget(self.btn_back)
 
@@ -116,9 +133,8 @@ class ReviewView(QWidget):
 
         self.btn_start = QPushButton("Start download", self)
         self.btn_start.setObjectName("primaryLimeBtn")
+        self.btn_start.setStyleSheet(LIME_PILL_BUTTON_STYLE)
         self.btn_start.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_start.setMinimumHeight(44)
-        self.btn_start.setStyleSheet("font-size: 14px; padding: 10px 24px;")
         self.btn_start.clicked.connect(self._on_start_clicked)
         bottom_bar.addWidget(self.btn_start)
 
@@ -138,36 +154,39 @@ class ReviewView(QWidget):
             idx_item = QTableWidgetItem(str(row + 1))
             idx_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             idx_item.setFlags(idx_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-            idx_item.setForeground(Qt.GlobalColor.darkGray)
+            idx_item.setForeground(QColor("#738072"))
 
-            # Column 1: Title
+            # Column 1: Title (Bold)
             tit_item = QTableWidgetItem(s.title)
             font = tit_item.font()
             font.setBold(True)
             tit_item.setFont(font)
-            tit_item.setForeground(Qt.GlobalColor.black)
+            tit_item.setForeground(QColor("#111813"))
 
             # Column 2: Artist
             if s.artist:
                 art_item = QTableWidgetItem(s.artist)
-                art_item.setForeground(Qt.GlobalColor.black)
+                art_item.setForeground(QColor("#111813"))
             else:
                 missing_artists_count += 1
                 art_item = QTableWidgetItem("Add artist")
-                art_item.setForeground(Qt.GlobalColor.gray)
+                art_item.setForeground(QColor("#8e9e90"))
 
             # Column 3: Search Query
             query_item = QTableWidgetItem(s.query or s.title)
-            query_item.setForeground(Qt.GlobalColor.darkGray)
+            query_item.setForeground(QColor("#2b362d"))
 
             # Column 4: Status
             if s.is_duplicate:
                 duplicate_count += 1
                 st_item = QTableWidgetItem("Duplicate")
-                st_item.setForeground(Qt.GlobalColor.darkYellow)
+                st_item.setForeground(QColor("#b45309"))
             else:
                 st_item = QTableWidgetItem("Ready")
-                st_item.setForeground(Qt.GlobalColor.darkGreen)
+                font_st = st_item.font()
+                font_st.setBold(True)
+                st_item.setFont(font_st)
+                st_item.setForeground(QColor("#1b7340"))
             st_item.setFlags(st_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
 
             self.table.setItem(row, 0, idx_item)
@@ -193,7 +212,7 @@ class ReviewView(QWidget):
 
         # Banner visibility
         if missing_artists_count > len(songs) * 0.4:
-            self.lbl_banner_text.setText("No artists detected on some songs. Add one where you can and matches get more accurate.")
+            self.lbl_banner_text.setText("No artists detected. Add one where you can and matches get more accurate.")
             self.banner.setVisible(True)
         else:
             self.banner.setVisible(False)
