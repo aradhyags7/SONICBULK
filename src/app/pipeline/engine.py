@@ -477,15 +477,6 @@ class PipelineEngine:
                     await asyncio.to_thread(self.tag_worker, job)
                 elif job.output_path and Path(job.output_path).is_file():
                     out_p = Path(job.output_path)
-                    cand = job.match_decision.candidate if job.match_decision else None
-                    album = cand.album if cand else None
-                    await asyncio.to_thread(
-                        tag_audio_file,
-                        out_p,
-                        title=job.song.title,
-                        artist=job.song.artist,
-                        album=album,
-                    )
                     if self.settings.output_format != "native":
                         conv_p = await asyncio.to_thread(
                             convert_audio_file,
@@ -493,6 +484,17 @@ class PipelineEngine:
                             target_format=self.settings.output_format,
                         )
                         job.output_path = str(conv_p)
+
+                    final_path = Path(job.output_path or out_p)
+                    cand = job.match_decision.candidate if job.match_decision else None
+                    album = cand.album if cand else None
+                    await asyncio.to_thread(
+                        tag_audio_file,
+                        final_path,
+                        title=job.song.title,
+                        artist=job.song.artist,
+                        album=album,
+                    )
 
                 job.status = JobStatus.DONE
                 self.count_downloaded += 1

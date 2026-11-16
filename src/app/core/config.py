@@ -38,7 +38,7 @@ class AppSettings:
     output_dir: str = field(default_factory=get_default_output_dir)
     folder_layout: str = "flat"  # "flat" | "artist_album"
     filename_template: str = "{artist} - {title}"
-    output_format: str = "native"  # "native" | "mp3" | "m4a" | "flac"
+    output_format: str = "mp3"  # "mp3" | "m4a" | "flac" | "native"
     search_concurrency: int = 8
     resolve_concurrency: int = 6
     download_concurrency: int = 1  # 1-by-1 sequential download
